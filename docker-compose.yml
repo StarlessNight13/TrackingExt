@@ -8,8 +8,8 @@ services:
       args:
         VITE_SERVER_URL: http://localhost:3000
     init: true
-    ports:
-      - "3001:80"
+    expose:
+      - "80"
     env_file:
       - path: apps/web/.env
         required: false
@@ -29,8 +29,8 @@ services:
       context: .
       dockerfile: apps/server/Dockerfile
     init: true
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     env_file:
       - path: apps/server/.env
         required: false
