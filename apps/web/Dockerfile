@@ -12,8 +12,8 @@ ARG VITE_SERVER_URL=http://localhost:3000
 ENV VITE_SERVER_URL=${VITE_SERVER_URL}
 ENV NODE_ENV=production
 RUN cd apps/web && bun run build \
-  && test -f apps/web/dist/index.html \
-  && echo "Vite build OK: $(find apps/web/dist -type f | wc -l) files"
+  && test -f dist/index.html \
+  && echo "Vite build OK: $(find dist -type f | wc -l) files"
 
 FROM nginx:alpine AS runner
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
