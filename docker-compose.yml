@@ -1,18 +1,15 @@
 name: trackingext
 
-# Production shape (single public URL via Dokploy/Traefik):
-#   https://track.staradox.com      → web container port 80  (Vite static SPA + nginx)
-#   https://track.staradox.com/api  → proxied by nginx to server:3000
-#   https://track.staradox.com/rpc  → proxied by nginx to server:3000
+# Single public entry (Dokploy/Traefik):
+#   Browser  → https://track.staradox.com → Traefik → web:80
+#   web/nginx → http://server:3000  (Docker compose network only)
 #
-# Networking rules for Dokploy:
-#   - Do NOT use ports: (that publishes to the host)
-#   - Do NOT use network_mode: host
-#   - Use expose: only (documents container ports on the Docker network)
-#   - Join dokploy-network so Traefik can reach the containers
+# server has NO public domain. Do not add api.* in Dokploy.
 #
-# Dokploy Domains:
-#   track.staradox.com → service web → port 80  (HTTPS terminates at Traefik)
+# Networking:
+#   - no ports: / no host network
+#   - web joins dokploy-network (Traefik)
+#   - server stays on the compose network only (internal)
 
 services:
   web:
@@ -20,7 +17,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        # Must match the public dashboard origin (baked into JS at build time)
+        # Public origin of the dashboard (same-origin calls /api and /rpc via nginx)
         VITE_SERVER_URL: ${VITE_SERVER_URL:-https://track.staradox.com}
     init: true
     expose:
@@ -28,14 +25,11 @@ services:
     networks:
       - dokploy-network
       - default
-    # Required when attached to multiple networks, or Traefik may pick the wrong one
     labels:
       - traefik.docker.network=dokploy-network
     depends_on:
       server:
         condition: service_healthy
-    # No Docker healthcheck: a failing check makes Traefik return 404 for the domain.
-    # Readiness is logged by apps/web/docker-entrypoint.sh instead.
     restart: unless-stopped
 
   server:
@@ -45,13 +39,9 @@ services:
     init: true
     expose:
       - "3000"
+    # Internal only — reachable as http://server:3000 from the web container
     networks:
-      - dokploy-network
       - default
-    labels:
-      - traefik.docker.network=dokploy-network
-    # Dokploy writes UI env vars to .env next to this compose file,
-    # but does NOT inject them unless referenced here.
     env_file:
       - path: .env
         required: false
