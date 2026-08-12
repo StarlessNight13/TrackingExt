@@ -7,11 +7,11 @@ COPY . .
 # Skip workspace lifecycle scripts (extension `wxt prepare` needs vite and is unused here)
 RUN --mount=type=cache,target=/root/.bun/install/cache bun install --ignore-scripts
 
-ENV NODE_ENV=production
-RUN cd apps/server && bun run build
 ENV SKIP_ENV_VALIDATION=
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
 WORKDIR /app/apps/server
-CMD ["bun", "dist/index.mjs"]
+# Run from source: the tsdown bundle cannot resolve libsql native bindings under Bun's linker
+CMD ["bun", "run", "src/index.ts"]
