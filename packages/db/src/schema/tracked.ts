@@ -75,6 +75,8 @@ export const userSettings = sqliteTable("user_settings", {
   recordHistory: integer("record_history", { mode: "boolean" }).default(true).notNull(),
   stripQueryParams: integer("strip_query_params", { mode: "boolean" }).default(false).notNull(),
   stripFragments: integer("strip_fragments", { mode: "boolean" }).default(true).notNull(),
+  dashboardThemeSeed: text("dashboard_theme_seed").default("#6750A4").notNull(),
+  dashboardThemeVariant: text("dashboard_theme_variant").default("TONAL_SPOT").notNull(),
   /** JSON array of hostnames, e.g. ["mail.google.com","bank.example"] */
   excludedHosts: text("excluded_hosts").default("[]").notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
@@ -123,3 +125,34 @@ export const userSettingsRelations = relations(userSettings, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+/** One-time WebRTC pairing sessions (6-digit code, ~10 min TTL). */
+export const lanPairing = sqliteTable(
+  "lan_pairing",
+  {
+    code: text("code").primaryKey(),
+    initiatorDeviceId: text("initiator_device_id").notNull(),
+    initiatorDeviceName: text("initiator_device_name").notNull(),
+    offerSdp: text("offer_sdp").notNull(),
+    joinerDeviceId: text("joiner_device_id"),
+    joinerDeviceName: text("joiner_device_name"),
+    answerSdp: text("answer_sdp"),
+    status: text("status").notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [index("lan_pairing_expiresAt_idx").on(table.expiresAt)],
+);
+
+/** Ephemeral WebRTC signaling between paired devices. */
+export const lanSignal = sqliteTable(
+  "lan_signal",
+  {
+    id: text("id").primaryKey(),
+    fromDeviceId: text("from_device_id").notNull(),
+    toDeviceId: text("to_device_id").notNull(),
+    kind: text("kind").notNull(),
+    payload: text("payload").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [index("lan_signal_toDeviceId_idx").on(table.toDeviceId)],
+);

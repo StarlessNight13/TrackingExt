@@ -124,15 +124,17 @@ export function SessionsPanel() {
 
   if (sessions.length === 0) {
     return (
-      <Empty className="border border-dashed">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <KeyRound />
-          </EmptyMedia>
-          <EmptyTitle>No active sessions</EmptyTitle>
-          <EmptyDescription>Sign in again from the web app or extension.</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <div className="dashboard-empty-state">
+        <Empty className="max-w-lg border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <KeyRound />
+            </EmptyMedia>
+            <EmptyTitle>No active sessions</EmptyTitle>
+            <EmptyDescription>Sign in again from the web app or extension.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </div>
     );
   }
 
@@ -147,7 +149,7 @@ export function SessionsPanel() {
         </CardHeader>
         <CardFooter className="flex flex-wrap gap-2">
           <Button
-            variant="outline"
+            variant="secondary"
             disabled={revokeOthers.isPending || sessions.length < 2}
             onClick={() => revokeOthers.mutate()}
           >
@@ -173,25 +175,31 @@ export function SessionsPanel() {
           const isCurrent = Boolean(currentToken && session.token === currentToken);
           return (
             <Card key={session.id}>
-              <CardHeader className="border-b">
+              <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-col gap-1">
-                    <CardTitle className="text-base">
-                      {parseUserAgent(session.userAgent)}
-                    </CardTitle>
-                    <CardDescription>
-                      Updated {relativeTime(session.updatedAt)} · expires{" "}
-                      {new Date(session.expiresAt).toLocaleString()}
-                    </CardDescription>
+                  <div className="flex items-start gap-3">
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
+                      <KeyRound className="size-5" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <CardDescription className="uppercase tracking-[0.14em]">Session</CardDescription>
+                      <CardTitle className="text-base">
+                        {parseUserAgent(session.userAgent)}
+                      </CardTitle>
+                      <CardDescription>
+                        Updated {relativeTime(session.updatedAt)} · expires{" "}
+                        {new Date(session.expiresAt).toLocaleString()}
+                      </CardDescription>
+                    </div>
                   </div>
                   {isCurrent ? <Badge>This session</Badge> : <Badge variant="outline">Active</Badge>}
                 </div>
               </CardHeader>
-              <CardContent className="flex flex-col gap-1 text-muted-foreground">
+              <CardContent className="flex flex-col gap-1 text-sm text-muted-foreground">
                 <span>IP: {session.ipAddress || "unknown"}</span>
                 <span className="truncate">User agent: {session.userAgent || "unknown"}</span>
               </CardContent>
-              <CardFooter className="border-t py-3">
+              <CardFooter>
                 <Button
                   variant="destructive"
                   size="sm"

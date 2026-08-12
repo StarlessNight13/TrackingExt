@@ -1,0 +1,62 @@
+@import "../popup/style.css";
+
+html.extension-dashboard,
+html.extension-dashboard body,
+html.extension-dashboard #root {
+  max-width: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+}
+
+.app--dashboard {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 24px clamp(16px, 3vw, 40px) 48px;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.app--dashboard-narrow {
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.dashboard-page__header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dashboard-page__meta {
+  gap: 8px;
+}
+
+.local-dashboard__tabs {
+  width: 100%;
+  max-width: none;
+}
+
+.local-dashboard__tab-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+}
+
+.local-dashboard__textarea {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  resize: vertical;
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (min-width: 900px) {
+  .local-dashboard__tab-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+}

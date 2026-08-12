@@ -2,6 +2,7 @@ import { Badge } from "@trackingext/ui/components/badge";
 import { Button } from "@trackingext/ui/components/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -27,7 +28,7 @@ import { Input } from "@trackingext/ui/components/input";
 import { Label } from "@trackingext/ui/components/label";
 import { Skeleton } from "@trackingext/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkX, ExternalLink, History, Pencil, Trash2 } from "lucide-react";
+import { Bookmark, BookmarkX, ExternalLink, History, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -114,18 +115,20 @@ export function TrackedTabsPanel() {
 
   if (tabs.length === 0) {
     return (
-      <Empty className="border border-dashed">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <BookmarkX />
-          </EmptyMedia>
-          <EmptyTitle>No tracked activities yet</EmptyTitle>
-          <EmptyDescription>
-            Open the browser extension, visit a page, and choose Track this tab. Synced activities
-            will show up here across every device on your account.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <div className="dashboard-empty-state">
+        <Empty className="max-w-lg border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <BookmarkX />
+            </EmptyMedia>
+            <EmptyTitle>No tracked activities yet</EmptyTitle>
+            <EmptyDescription>
+              Open the browser extension, visit a page, and choose Track this tab. Synced activities
+              will show up here across every device on your account.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </div>
     );
   }
 
@@ -134,50 +137,54 @@ export function TrackedTabsPanel() {
       <div className="flex flex-col gap-3">
         {tabs.map((tab) => (
           <Card key={tab.id}>
-            <CardHeader className="border-b">
-              <div className="flex items-start justify-between gap-3">
+            <CardHeader className="gap-2">
+              <div className="col-start-1 flex min-w-0 items-start gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
+                  {tab.emoji ? <span className="text-lg">{tab.emoji}</span> : <Bookmark className="size-5" />}
+                </div>
                 <div className="flex min-w-0 flex-col gap-1">
-                  <CardTitle className="truncate text-base">
-                    {tab.emoji ? `${tab.emoji} ` : ""}
-                    {tab.name}
-                  </CardTitle>
+                  <CardDescription className="uppercase tracking-[0.14em]">Tracked activity</CardDescription>
+                  <CardTitle className="truncate text-base">{tab.name}</CardTitle>
                   <CardDescription className="truncate">
                     {tab.currentTitle || displayHostPath(tab.currentUrl)}
                   </CardDescription>
                 </div>
+              </div>
+              <CardAction>
                 {tab.activeDevice ? (
-                  <Badge variant="secondary">Active · {tab.activeDevice.name}</Badge>
+                  <Badge
+                    variant="secondary"
+                    className="max-w-[11rem]"
+                    title={`Active · ${tab.activeDevice.name}`}
+                  >
+                    <span className="truncate">Active · {tab.activeDevice.name}</span>
+                  </Badge>
                 ) : (
                   <Badge variant="outline">Idle</Badge>
                 )}
-              </div>
+              </CardAction>
             </CardHeader>
-            <CardContent className="flex flex-col gap-2">
+            <CardContent className="flex flex-col gap-3">
               <a
                 href={tab.currentUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="truncate text-muted-foreground underline-offset-4 hover:underline"
+                className="truncate text-sm text-muted-foreground underline-offset-4 hover:underline"
               >
                 {displayHostPath(tab.currentUrl)}
               </a>
-              <p className="text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Last updated from {tab.lastUpdatedDevice?.name ?? "unknown device"} ·{" "}
                 {relativeTime(tab.lastUpdatedAt)}
               </p>
             </CardContent>
-            <CardFooter className="flex flex-wrap gap-2 border-t py-3">
-              <Button
-                variant="outline"
-                size="sm"
-                render={<a href={tab.currentUrl} target="_blank" rel="noreferrer" />}
-              >
+            <CardFooter className="flex flex-wrap gap-2.5">
+              <Button render={<a href={tab.currentUrl} target="_blank" rel="noreferrer" />}>
                 <ExternalLink data-icon="inline-start" />
                 Open
               </Button>
               <Button
-                variant="outline"
-                size="sm"
+                variant="secondary"
                 onClick={() => {
                   setEditingId(tab.id);
                   setEditName(tab.name);
@@ -186,13 +193,12 @@ export function TrackedTabsPanel() {
                 <Pencil data-icon="inline-start" />
                 Rename
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setHistoryTabId(tab.id)}>
+              <Button variant="outline" onClick={() => setHistoryTabId(tab.id)}>
                 <History data-icon="inline-start" />
                 History
               </Button>
               <Button
                 variant="destructive"
-                size="sm"
                 disabled={deleteMutation.isPending}
                 onClick={() => {
                   if (confirm(`Stop tracking “${tab.name}”? This deletes its synced history.`)) {

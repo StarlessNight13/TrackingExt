@@ -1,5 +1,5 @@
 import { Button } from "@trackingext/ui/components/button";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 
 import { authClient } from "@/lib/auth-client";
 
@@ -7,29 +7,37 @@ import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
 
 export default function Header() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { data: session } = authClient.useSession();
 
+  if (pathname === "/login") {
+    return null;
+  }
+  const homeHref = session ? "/dashboard" : "/login";
+
   return (
-    <header className="border-b border-border">
-      <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-3">
+    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/70 backdrop-blur-xl">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4">
         <div className="flex items-center gap-6">
-          <Link to="/" className="text-sm font-semibold tracking-tight">
-            TrackingExt
+          <Link to={homeHref} className="flex items-center gap-3 text-sm font-semibold tracking-tight">
+            <span className="flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25">
+              T
+            </span>
+            <span className="flex flex-col leading-none">
+              <span className="text-[0.72rem] uppercase tracking-[0.18em] text-muted-foreground">
+                Dashboard
+              </span>
+              <span className="text-base">TrackingExt</span>
+            </span>
           </Link>
-          <nav className="flex items-center gap-3 text-sm text-muted-foreground">
-            <Link
-              to="/"
-              className="hover:text-foreground data-[status=active]:text-foreground"
-              activeOptions={{ exact: true }}
-            >
-              Home
-            </Link>
+          <nav className="hidden items-center gap-3 text-sm text-muted-foreground md:flex">
             {session ? (
               <Link
                 to="/dashboard"
-                className="hover:text-foreground data-[status=active]:text-foreground"
+                className="rounded-full px-3 py-2 hover:bg-card hover:text-foreground data-[status=active]:bg-card data-[status=active]:text-foreground"
+                activeOptions={{ exact: true }}
               >
-                Dashboard
+                Tracked tabs
               </Link>
             ) : null}
           </nav>
@@ -37,9 +45,13 @@ export default function Header() {
         <div className="flex items-center gap-2">
           {session ? (
             <Button variant="outline" size="sm" render={<Link to="/dashboard" />}>
-              Open dashboard
+              Open tracked tabs
             </Button>
-          ) : null}
+          ) : (
+            <Button size="sm" render={<Link to="/login" />}>
+              Sign in
+            </Button>
+          )}
           <ModeToggle />
           <UserMenu />
         </div>

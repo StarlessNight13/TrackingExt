@@ -1,8 +1,35 @@
+import {
+  DEFAULT_DASHBOARD_THEME_SEED,
+  DEFAULT_DASHBOARD_THEME_VARIANT,
+  type DashboardThemeVariant,
+} from "@trackingext/api/lib/settings.constants";
+
+import { DEFAULT_SYNC_MODES } from "./sync-modes";
+
+export type { DashboardThemeVariant };
+
+export type LanSignalingMode = "local" | "server-relay";
+
+export type SyncModes = {
+  offline: boolean;
+  lan: boolean;
+  server: boolean;
+};
+
+export type PairedLanDevice = {
+  deviceId: string;
+  deviceName: string;
+  browser?: string;
+  pairedAt: string;
+};
+
 export type PrivacySettings = {
   recordHistory: boolean;
   stripQueryParams: boolean;
   stripFragments: boolean;
   excludedHosts: string[];
+  dashboardThemeSeed: string;
+  dashboardThemeVariant: DashboardThemeVariant;
 };
 
 export type DeviceInfo = {
@@ -47,6 +74,12 @@ export type LocalState = {
   sessionToken: string | null;
   deviceId: string | null;
   deviceName: string | null;
+  localDeviceId: string | null;
+  syncModes: SyncModes;
+  lanSignalingMode: LanSignalingMode;
+  onboardingComplete: boolean;
+  pairedLanDevices: PairedLanDevice[];
+  localHistory: Record<string, HistoryEntry[]>;
   /** browser tabId -> tracked tab id */
   bindings: Record<string, string>;
   /** Cached remote tabs for offline-ish popup */
@@ -60,6 +93,8 @@ export const DEFAULT_SETTINGS: PrivacySettings = {
   stripQueryParams: false,
   stripFragments: true,
   excludedHosts: [],
+  dashboardThemeSeed: DEFAULT_DASHBOARD_THEME_SEED,
+  dashboardThemeVariant: DEFAULT_DASHBOARD_THEME_VARIANT,
 };
 
 export const DEFAULT_LOCAL_STATE: LocalState = {
@@ -67,6 +102,12 @@ export const DEFAULT_LOCAL_STATE: LocalState = {
   sessionToken: null,
   deviceId: null,
   deviceName: null,
+  localDeviceId: null,
+  syncModes: DEFAULT_SYNC_MODES,
+  lanSignalingMode: "local",
+  onboardingComplete: false,
+  pairedLanDevices: [],
+  localHistory: {},
   bindings: {},
   cachedTabs: [],
   settings: DEFAULT_SETTINGS,

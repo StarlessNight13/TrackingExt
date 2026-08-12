@@ -3,186 +3,21 @@ import { useEffect, useState, useTransition } from "react";
 import { displayHostPath } from "@/lib/privacy";
 import { DEFAULT_SERVER_URL, normalizeServerUrl } from "@/lib/server-url";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
-import type { HistoryEntry, PrivacySettings, TrackedTab } from "@/lib/types";
+import { HistoryView } from "@/components/history-view";
+import { openDashboard, openWebDashboard, usesWebDashboard } from "@/lib/open-dashboard";
+import { describeSyncModes, needsServerUrl as needsServerUrlForModes } from "@/lib/sync-modes";
+import type { LanSignalingMode, PrivacySettings, SyncModes, TrackedTab } from "@/lib/types";
+import { DEFAULT_SETTINGS } from "@/lib/types";
+import { formatDevice, relativeTime } from "@/lib/view-utils";
 
-type View = "setup" | "main" | "settings" | "history";
+import { AuthPanel } from "./components/auth-panel";
+import { ExtensionThemeProvider } from "./components/extension-theme-provider";
+import { IconLayoutDashboard, IconLogOut, IconSettings } from "./components/icons";
+import { LanPairingPanel } from "./components/lan-pairing-panel";
+import { M3SwitchRow } from "./components/m3-switch";
+import { OnboardingWizard } from "./components/onboarding-wizard";
 
-function formatDevice(tab: TrackedTab) {
-  const device = tab.lastUpdatedDevice;
-  if (!device) return "Unknown device";
-  return `${device.name}`;
-}
-
-function relativeTime(iso: string) {
-  const delta = Date.now() - new Date(iso).getTime();
-  const mins = Math.round(delta / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 48) return `${hours}h ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
-function openDashboard(serverUrl: string, path = "/dashboard") {
-  void browser.tabs.create({ url: new URL(path, `${serverUrl}/`).toString() });
-}
-
-function SetupView({
-  snapshot,
-  onDone,
-}: {
-  snapshot: PopupSnapshot | null;
-  onDone: (snapshot: PopupSnapshot) => void;
-}) {
-  const [serverUrl, setServerUrl] = useState(snapshot?.serverUrl ?? DEFAULT_SERVER_URL);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  const submit = () => {
-    setError(null);
-    startTransition(async () => {
-      try {
-        const normalized = normalizeServerUrl(serverUrl);
-        const res = await sendMessage({ type: "SET_SERVER_URL", serverUrl: normalized });
-        if (!res.ok) {
-          setError(res.error);
-          return;
-        }
-        if (res.snapshot) onDone(res.snapshot);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Invalid endpoint");
-      }
-    });
-  };
-
-  return (
-    <div className="stack">
-      <div className="brand">
-        <h1>TrackingExt</h1>
-        <span className="meta">Self-hosted setup</span>
-      </div>
-      <p className="muted" style={{ margin: 0 }}>
-        Enter the base URL for your TrackingExt API server before signing in.
-      </p>
-      <div className="panel stack">
-        <div className="field">
-          <label htmlFor="server-url">API endpoint</label>
-          <input
-            id="server-url"
-            type="url"
-            value={serverUrl}
-            onChange={(e) => setServerUrl(e.target.value)}
-            placeholder={DEFAULT_SERVER_URL}
-            autoFocus
-          />
-        </div>
-        <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-          Example: `https://trackingext.example.com` or `http://localhost:3000`
-        </p>
-        {error ? <p className="error">{error}</p> : null}
-        <button className="btn block" disabled={pending || !serverUrl.trim()} onClick={submit}>
-          {pending ? "Saving…" : "Continue"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function AuthForm({
-  snapshot,
-  onDone,
-}: {
-  snapshot: PopupSnapshot;
-  onDone: (snapshot: PopupSnapshot) => void;
-}) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  const submit = () => {
-    setError(null);
-    startTransition(async () => {
-      const res =
-        mode === "signin"
-          ? await sendMessage({ type: "SIGN_IN", email, password })
-          : await sendMessage({ type: "SIGN_UP", name, email, password });
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      if (res.snapshot) onDone(res.snapshot);
-    });
-  };
-
-  return (
-    <div className="stack">
-      <div className="brand">
-        <h1>TrackingExt</h1>
-        <span className="meta">Tracked tabs</span>
-      </div>
-      <p className="muted" style={{ margin: 0 }}>
-        Sign in to sync activities across Firefox and Chromium.
-      </p>
-      <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-        Endpoint: {snapshot.serverUrl}
-      </p>
-      <div className="panel stack">
-        {mode === "signup" ? (
-          <div className="field">
-            <label htmlFor="name">Name</label>
-            <input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoComplete="name"
-            />
-          </div>
-        ) : null}
-        <div className="field">
-          <label htmlFor="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete={mode === "signin" ? "current-password" : "new-password"}
-          />
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-        <button className="btn block" disabled={pending || !email || !password} onClick={submit}>
-          {pending ? "Working…" : mode === "signin" ? "Sign in" : "Create account"}
-        </button>
-        <button
-          className="btn ghost"
-          type="button"
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-        >
-          {mode === "signin" ? "Need an account? Sign up" : "Have an account? Sign in"}
-        </button>
-        <button
-          className="btn ghost"
-          type="button"
-          onClick={() => openDashboard(snapshot.serverUrl!, mode === "signin" ? "/login" : "/")}
-        >
-          Open dashboard
-        </button>
-      </div>
-    </div>
-  );
-}
+type View = "main" | "settings" | "history";
 
 function SettingsView({
   snapshot,
@@ -195,13 +30,17 @@ function SettingsView({
 }) {
   const [deviceName, setDeviceName] = useState(snapshot.deviceName ?? "");
   const [serverUrl, setServerUrl] = useState(snapshot.serverUrl ?? DEFAULT_SERVER_URL);
+  const [syncModes, setSyncModes] = useState<SyncModes>(snapshot.syncModes);
+  const [lanSignalingMode, setLanSignalingMode] = useState<LanSignalingMode>(snapshot.lanSignalingMode);
+  const [showPairing, setShowPairing] = useState(false);
   const [excluded, setExcluded] = useState(snapshot.settings.excludedHosts.join("\n"));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     setServerUrl(snapshot.serverUrl ?? DEFAULT_SERVER_URL);
-  }, [snapshot.serverUrl]);
+    setSyncModes(snapshot.syncModes);
+  }, [snapshot.serverUrl, snapshot.syncModes]);
 
   const patchSettings = (settings: Partial<PrivacySettings>) => {
     setError(null);
@@ -252,6 +91,56 @@ function SettingsView({
     patchSettings({ excludedHosts: hosts });
   };
 
+  const saveSyncModes = () => {
+    setError(null);
+    startTransition(async () => {
+      const res = await sendMessage({ type: "UPDATE_SYNC_MODES", syncModes });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      if (res.snapshot) onUpdate(res.snapshot);
+    });
+  };
+
+  const toggleSyncMode = (key: keyof SyncModes) => {
+    setSyncModes((current) => ({ ...current, [key]: !current[key] }));
+  };
+
+  const needsServerUrl = needsServerUrlForModes(syncModes, lanSignalingMode, snapshot.serverUrl);
+
+  const saveLanSignalingMode = (mode: LanSignalingMode) => {
+    setError(null);
+    startTransition(async () => {
+      if (mode === "server-relay" && !snapshot.serverUrl) {
+        if (!serverUrl.trim()) {
+          setError("Enter a relay server URL before enabling server relay");
+          return;
+        }
+        try {
+          const normalized = normalizeServerUrl(serverUrl);
+          const urlRes = await sendMessage({ type: "SET_SERVER_URL", serverUrl: normalized });
+          if (!urlRes.ok) {
+            setError(urlRes.error);
+            return;
+          }
+          if (urlRes.snapshot) onUpdate(urlRes.snapshot);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Invalid endpoint");
+          return;
+        }
+      }
+
+      const res = await sendMessage({ type: "UPDATE_LAN_SIGNALING_MODE", lanSignalingMode: mode });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setLanSignalingMode(mode);
+      if (res.snapshot) onUpdate(res.snapshot);
+    });
+  };
+
   return (
     <div className="stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -263,25 +152,191 @@ function SettingsView({
         </span>
       </div>
 
-      <div className="panel stack">
-        <div className="field">
-          <label htmlFor="server-endpoint">API endpoint</label>
-          <input
-            id="server-endpoint"
-            type="url"
-            value={serverUrl}
-            onChange={(e) => setServerUrl(e.target.value)}
-          />
-        </div>
-        <button className="btn secondary" disabled={pending || !serverUrl.trim()} onClick={saveServerUrl}>
-          Save endpoint
+      <div className="panel stack settings-panel">
+        <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+          Sync modes (at least one required)
+        </p>
+        <M3SwitchRow
+          title="Offline"
+          description="This browser only"
+          checked={syncModes.offline}
+          onChange={() => toggleSyncMode("offline")}
+          id="settings-mode-offline"
+        />
+        <M3SwitchRow
+          title="LAN"
+          description="Same-network WebRTC sync"
+          checked={syncModes.lan}
+          onChange={() => toggleSyncMode("lan")}
+          id="settings-mode-lan"
+        />
+        <M3SwitchRow
+          title="Server"
+          description="Cloud sync and web dashboard"
+          checked={syncModes.server}
+          onChange={() => toggleSyncMode("server")}
+          id="settings-mode-server"
+        />
+        <button className="btn secondary" disabled={pending} onClick={saveSyncModes}>
+          Save sync modes
         </button>
-        {snapshot.serverUrl ? (
-          <button className="btn ghost" disabled={pending} onClick={() => openDashboard(snapshot.serverUrl!)}>
-            Open dashboard
-          </button>
-        ) : null}
+        <button
+          className="btn ghost"
+          disabled={pending}
+          onClick={() => {
+            setError(null);
+            startTransition(async () => {
+              const res = await sendMessage({ type: "SYNC_NOW" });
+              if (!res.ok) {
+                setError(res.error);
+                return;
+              }
+              if (res.snapshot) onUpdate(res.snapshot);
+            });
+          }}
+        >
+          Sync all modes now
+        </button>
       </div>
+
+      {snapshot.syncModes.lan || syncModes.lan ? (
+        <div className="panel stack">
+          <span className="section-title" style={{ margin: 0 }}>
+            LAN devices
+          </span>
+          <M3SwitchRow
+            title="Use server relay"
+            description="6-digit pairing codes and automatic reconnect via your server"
+            checked={lanSignalingMode === "server-relay"}
+            onChange={(checked) => saveLanSignalingMode(checked ? "server-relay" : "local")}
+            id="settings-lan-relay"
+          />
+          {needsServerUrl && !(syncModes.server || snapshot.syncModes.server) ? (
+            <div className="stack" style={{ gap: 8 }}>
+              <div className="field">
+                <label htmlFor="settings-lan-relay-url">Relay server URL</label>
+                <input
+                  id="settings-lan-relay-url"
+                  type="url"
+                  value={serverUrl}
+                  onChange={(e) => setServerUrl(e.target.value)}
+                  placeholder="http://localhost:3000"
+                />
+              </div>
+              <button className="btn secondary" disabled={pending || !serverUrl.trim()} onClick={saveServerUrl}>
+                Save relay URL
+              </button>
+            </div>
+          ) : null}
+          <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+            {lanSignalingMode === "local"
+              ? "Local mode pairs via copied tokens — fully self-contained. Reconnect after restart requires re-pairing."
+              : "Relay mode uses your server for 6-digit pairing codes and automatic reconnect."}
+          </p>
+          {snapshot.pairedLanDevices.length === 0 ? (
+            <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+              No paired devices. Use onboarding or pair from another browser.
+            </p>
+          ) : (
+            <div className="list compact-list">
+              {snapshot.pairedLanDevices.map((device) => {
+                const online = snapshot.lanPeerStatus[device.deviceId] ?? false;
+                return (
+                  <div key={device.deviceId} className="panel compact-track">
+                    <div className="row" style={{ justifyContent: "space-between" }}>
+                      <span className="name">{device.deviceName}</span>
+                      <span className="pill">{online ? "Connected" : "Offline"}</span>
+                    </div>
+                    <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+                      {device.browser ?? "Browser"} · paired {relativeTime(device.pairedAt)}
+                    </p>
+                    <button
+                      className="btn danger"
+                      disabled={pending}
+                      onClick={() => {
+                        setError(null);
+                        startTransition(async () => {
+                          const res = await sendMessage({
+                            type: "REMOVE_LAN_PEER",
+                            deviceId: device.deviceId,
+                          });
+                          if (!res.ok) {
+                            setError(res.error);
+                            return;
+                          }
+                          if (res.snapshot) onUpdate(res.snapshot);
+                        });
+                      }}
+                    >
+                      Unpair
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <button
+            className="btn secondary"
+            disabled={
+              pending ||
+              snapshot.pairedLanDevices.length === 0 ||
+              lanSignalingMode === "local"
+            }
+            onClick={() => {
+              setError(null);
+              startTransition(async () => {
+                const res = await sendMessage({ type: "RECONNECT_LAN" });
+                if (!res.ok) {
+                  setError(res.error);
+                  return;
+                }
+                if (res.snapshot) onUpdate(res.snapshot);
+              });
+            }}
+          >
+            Reconnect LAN
+          </button>
+          {!showPairing ? (
+            <button className="btn secondary" disabled={pending} onClick={() => setShowPairing(true)}>
+              Pair new device
+            </button>
+          ) : (
+            <LanPairingPanel
+              compact
+              snapshot={snapshot}
+              lanSignalingMode={lanSignalingMode}
+              syncModes={syncModes}
+              onUpdate={(next) => {
+                onUpdate(next);
+                setShowPairing(false);
+              }}
+              onPaired={() => setShowPairing(false)}
+            />
+          )}
+        </div>
+      ) : null}
+
+      {needsServerUrl ? (
+        <div className="panel stack">
+          <div className="field">
+            <label htmlFor="server-endpoint">API endpoint / relay URL</label>
+            <input
+              id="server-endpoint"
+              type="url"
+              value={serverUrl}
+              onChange={(e) => setServerUrl(e.target.value)}
+            />
+          </div>
+          <button className="btn secondary" disabled={pending || !serverUrl.trim()} onClick={saveServerUrl}>
+            Save endpoint
+          </button>
+          {snapshot.serverUrl && snapshot.syncModes.server ? (
+            <button className="btn ghost" disabled={pending} onClick={() => openWebDashboard(snapshot.serverUrl!)}>
+              Open dashboard
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="panel stack">
         <div className="field">
@@ -293,34 +348,29 @@ function SettingsView({
         </button>
       </div>
 
-      <div className="panel stack">
-        <label className="toggle">
-          <span>Record navigation history</span>
-          <input
-            type="checkbox"
-            checked={snapshot.settings.recordHistory}
-            onChange={(e) => patchSettings({ recordHistory: e.target.checked })}
-          />
-        </label>
-        <label className="toggle">
-          <span>Store URL query parameters</span>
-          <input
-            type="checkbox"
-            checked={!snapshot.settings.stripQueryParams}
-            onChange={(e) => patchSettings({ stripQueryParams: !e.target.checked })}
-          />
-        </label>
-        <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-          Auth-related query keys (token, session, api_key, …) are always removed.
-        </p>
-        <label className="toggle">
-          <span>Store URL fragments (#…)</span>
-          <input
-            type="checkbox"
-            checked={!snapshot.settings.stripFragments}
-            onChange={(e) => patchSettings({ stripFragments: !e.target.checked })}
-          />
-        </label>
+      <div className="panel stack settings-panel">
+        <span className="section-title" style={{ margin: 0 }}>
+          Privacy
+        </span>
+        <M3SwitchRow
+          title="Record navigation history"
+          checked={snapshot.settings.recordHistory}
+          onChange={(checked) => patchSettings({ recordHistory: checked })}
+          id="settings-record-history"
+        />
+        <M3SwitchRow
+          title="Store URL query parameters"
+          description="Auth-related query keys are always removed"
+          checked={!snapshot.settings.stripQueryParams}
+          onChange={(checked) => patchSettings({ stripQueryParams: !checked })}
+          id="settings-store-query"
+        />
+        <M3SwitchRow
+          title="Store URL fragments (#…)"
+          checked={!snapshot.settings.stripFragments}
+          onChange={(checked) => patchSettings({ stripFragments: !checked })}
+          id="settings-store-fragments"
+        />
       </div>
 
       <div className="panel stack">
@@ -350,7 +400,7 @@ function SettingsView({
   );
 }
 
-function HistoryView({
+function HistoryPanel({
   tab,
   onBack,
   onUpdate,
@@ -359,75 +409,7 @@ function HistoryView({
   onBack: () => void;
   onUpdate: (snapshot: PopupSnapshot) => void;
 }) {
-  const [entries, setEntries] = useState<HistoryEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  useEffect(() => {
-    startTransition(async () => {
-      const res = await sendMessage({ type: "GET_HISTORY", trackedTabId: tab.id });
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      setEntries((res.history as HistoryEntry[]) ?? []);
-      if (res.snapshot) onUpdate(res.snapshot);
-    });
-  }, [tab.id, onUpdate]);
-
-  const clear = () => {
-    startTransition(async () => {
-      const res = await sendMessage({ type: "CLEAR_HISTORY", trackedTabId: tab.id });
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      setEntries([]);
-      if (res.snapshot) onUpdate(res.snapshot);
-    });
-  };
-
-  return (
-    <div className="stack">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <button className="btn ghost" onClick={onBack}>
-          ← Back
-        </button>
-        <button className="btn danger" disabled={pending || entries.length === 0} onClick={clear}>
-          Clear history
-        </button>
-      </div>
-      <div className="panel">
-        <p className="title" style={{ margin: 0 }}>
-          {tab.emoji ? `${tab.emoji} ` : ""}
-          {tab.name}
-        </p>
-        <p className="url">Current: {displayHostPath(tab.currentUrl)}</p>
-      </div>
-      <div className="section">
-        <h2 className="section-title">History</h2>
-        {entries.length === 0 ? (
-          <div className="empty">No history yet for this activity.</div>
-        ) : (
-          <div className="list">
-            {entries.map((entry) => (
-              <button
-                key={entry.id}
-                className="list-item"
-                onClick={() => void browser.tabs.create({ url: entry.url })}
-              >
-                <span className="name">{entry.title || displayHostPath(entry.url)}</span>
-                <span className="sub">
-                  {displayHostPath(entry.url)} · {relativeTime(entry.visitedAt)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      {error ? <p className="error">{error}</p> : null}
-    </div>
-  );
+  return <HistoryView tab={tab} onBack={onBack} onUpdate={onUpdate} />;
 }
 
 function MainView({
@@ -464,13 +446,38 @@ function MainView({
   };
 
   const canTrack = Boolean(current && !tracked);
+  const lanSummary =
+    snapshot.syncModes.lan && snapshot.pairedLanDevices.length > 0
+      ? `${snapshot.lanConnectedPeers}/${snapshot.pairedLanDevices.length} LAN peers online`
+      : null;
 
   return (
     <div className="stack">
       <div className="brand">
         <h1>TrackingExt</h1>
-        <button className="btn ghost" type="button" onClick={onOpenSettings} title="Settings">
-          Settings
+        <button className="btn ghost icon-btn" type="button" onClick={onOpenSettings} title="Settings" aria-label="Settings">
+          <IconSettings />
+        </button>
+      </div>
+
+      <div className="panel compact-track sync-status-bar">
+        <div className="row wrap" style={{ justifyContent: "space-between" }}>
+          <span className="pill">{describeSyncModes(snapshot.syncModes)}</span>
+          {lanSummary ? <span className="muted">{lanSummary}</span> : null}
+        </div>
+        <button
+          className="btn secondary"
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            run(async () => {
+              const res = await sendMessage({ type: "SYNC_NOW" });
+              if (!res.ok) throw new Error(res.error);
+              if (res.snapshot) onUpdate(res.snapshot);
+            })
+          }
+        >
+          Sync now
         </button>
       </div>
 
@@ -692,14 +699,23 @@ function MainView({
 
       {error ? <p className="error">{error}</p> : null}
 
-      <div className="footer">
-        <span className="truncate">{snapshot.userEmail}</span>
-        <div className="row">
-          <button className="btn ghost" onClick={() => openDashboard(snapshot.serverUrl!)}>
-            Dashboard
-          </button>
+      <div className="footer footer--actions">
+        <button
+          className="btn ghost icon-btn"
+          type="button"
+          title={usesWebDashboard(snapshot) ? "Open web dashboard" : "Open local dashboard"}
+          aria-label={usesWebDashboard(snapshot) ? "Open web dashboard" : "Open local dashboard"}
+          onClick={() => openDashboard(snapshot)}
+        >
+          <IconLayoutDashboard />
+        </button>
+        {snapshot.authenticated ? (
           <button
-            className="btn ghost"
+            className="btn ghost icon-btn"
+            type="button"
+            title="Sign out"
+            aria-label="Sign out"
+            disabled={pending}
             onClick={() =>
               run(async () => {
                 const res = await sendMessage({ type: "SIGN_OUT" });
@@ -708,9 +724,9 @@ function MainView({
               })
             }
           >
-            Sign out
+            <IconLogOut />
           </button>
-        </div>
+        ) : null}
       </div>
     </div>
   );
@@ -723,37 +739,54 @@ function App() {
   const [bootError, setBootError] = useState<string | null>(null);
 
   useEffect(() => {
-    void sendMessage({ type: "GET_SNAPSHOT" }).then((res) => {
+    void sendMessage({ type: "GET_SNAPSHOT" }).then(async (res) => {
       if (!res.ok) {
         setBootError(res.error);
         return;
       }
-      setSnapshot(res.snapshot ?? null);
+
+      const initial = res.snapshot ?? null;
+      if (initial?.onboardingComplete && initial.syncModes.server && initial.authenticated) {
+        const refreshed = await sendMessage({ type: "REFRESH" });
+        if (refreshed.ok && refreshed.snapshot) {
+          setSnapshot(refreshed.snapshot);
+          return;
+        }
+      }
+
+      setSnapshot(initial);
     });
   }, []);
 
+  const themeSettings = snapshot?.settings ?? DEFAULT_SETTINGS;
+
   if (bootError) {
     return (
-      <div className="app">
-        <p className="error">{bootError}</p>
-      </div>
+      <ExtensionThemeProvider settings={themeSettings}>
+        <div className="app">
+          <p className="error">{bootError}</p>
+        </div>
+      </ExtensionThemeProvider>
     );
   }
 
   if (!snapshot) {
     return (
-      <div className="app">
-        <div className="empty">Loading…</div>
-      </div>
+      <ExtensionThemeProvider settings={themeSettings}>
+        <div className="app">
+          <div className="empty">Loading…</div>
+        </div>
+      </ExtensionThemeProvider>
     );
   }
 
   return (
-    <div className="app">
-      {!snapshot.serverUrl ? (
-        <SetupView snapshot={snapshot} onDone={setSnapshot} />
-      ) : !snapshot.authenticated ? (
-        <AuthForm snapshot={snapshot} onDone={setSnapshot} />
+    <ExtensionThemeProvider settings={snapshot.settings}>
+      <div className="app">
+      {!snapshot.onboardingComplete ? (
+        <OnboardingWizard snapshot={snapshot} onDone={setSnapshot} />
+      ) : snapshot.syncModes.server && snapshot.serverUrl && !snapshot.authenticated ? (
+        <AuthPanel snapshot={snapshot} onDone={setSnapshot} />
       ) : view === "settings" ? (
         <SettingsView
           snapshot={snapshot}
@@ -761,7 +794,7 @@ function App() {
           onUpdate={setSnapshot}
         />
       ) : view === "history" && historyTab ? (
-        <HistoryView
+        <HistoryPanel
           tab={historyTab}
           onBack={() => {
             setView("main");
@@ -773,14 +806,21 @@ function App() {
         <MainView
           snapshot={snapshot}
           onUpdate={setSnapshot}
-          onOpenSettings={() => setView("settings")}
+          onOpenSettings={() => {
+            if (usesWebDashboard(snapshot)) {
+              setView("settings");
+              return;
+            }
+            openDashboard(snapshot, "settings");
+          }}
           onOpenHistory={(tab) => {
             setHistoryTab(tab);
             setView("history");
           }}
         />
       )}
-    </div>
+      </div>
+    </ExtensionThemeProvider>
   );
 }
 

@@ -84,18 +84,20 @@ export function DevicesPanel() {
 
   if (devices.length === 0) {
     return (
-      <Empty className="border border-dashed">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <MonitorSmartphone />
-          </EmptyMedia>
-          <EmptyTitle>No extension devices yet</EmptyTitle>
-          <EmptyDescription>
-            Install the extension and sign in. Each browser installation registers as a device such
-            as “Home PC · Firefox” or “Laptop · Chrome”.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <div className="dashboard-empty-state">
+        <Empty className="max-w-lg border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <MonitorSmartphone />
+            </EmptyMedia>
+            <EmptyTitle>No extension devices yet</EmptyTitle>
+            <EmptyDescription>
+              Install the extension and sign in. Each browser installation registers as a device such
+              as “Home PC · Firefox” or “Laptop · Chrome”.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </div>
     );
   }
 
@@ -104,23 +106,29 @@ export function DevicesPanel() {
       <div className="flex flex-col gap-3">
         {devices.map((device) => (
           <Card key={device.id}>
-            <CardHeader className="border-b">
+            <CardHeader>
               <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col gap-1">
-                  <CardTitle className="text-base">{device.name}</CardTitle>
-                  <CardDescription>Last seen {relativeTime(device.lastSeenAt)}</CardDescription>
+                <div className="flex items-start gap-3">
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
+                    <MonitorSmartphone className="size-5" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <CardDescription className="uppercase tracking-[0.14em]">Registered device</CardDescription>
+                    <CardTitle className="text-base">{device.name}</CardTitle>
+                    <CardDescription>Last seen {relativeTime(device.lastSeenAt)}</CardDescription>
+                  </div>
                 </div>
                 <Badge variant="secondary">{device.browser}</Badge>
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Registered {new Date(device.createdAt).toLocaleString()}
               </p>
             </CardContent>
-            <CardFooter className="flex flex-wrap gap-2 border-t py-3">
+            <CardFooter className="flex flex-wrap gap-2">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => {
                   setEditingId(device.id);

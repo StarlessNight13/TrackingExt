@@ -3,6 +3,11 @@ import { defineConfig } from "wxt";
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
+  webExt: {
+    binaries: {
+      chrome: "/usr/bin/helium",
+    },
+  },
   suppressWarnings: {
     firefoxDataCollection: true,
   },
@@ -10,7 +15,7 @@ export default defineConfig({
     name: "TrackingExt — Tracked Tabs",
     description:
       "Mark tabs as persistent activities that sync across Firefox and Chromium browsers.",
-    permissions: ["tabs", "storage", "alarms", "contextMenus", "notifications"],
+    permissions: ["tabs", "storage", "alarms", "contextMenus", "notifications", "offscreen"],
     host_permissions: ["<all_urls>"],
     browser_specific_settings: {
       gecko: {

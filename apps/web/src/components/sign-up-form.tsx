@@ -1,40 +1,73 @@
-import { Button } from "@trackingext/ui/components/button";
-import { Input } from "@trackingext/ui/components/input";
-import { Label } from "@trackingext/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
+import { ArrowRight, Eye, EyeOff, KeyRound, Mail, User } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import z from "zod";
 
+import type { AuthThemeColors } from "@/components/auth/auth-theme";
+import { M3CircularProgress } from "@/components/auth/m3-circular-progress";
+import { M3TextField } from "@/components/auth/m3-text-field";
+import Loader from "@/components/loader";
 import { authClient } from "@/lib/auth-client";
+import {
+  buildRememberedUserFromSession,
+  saveRememberedUser,
+} from "@/lib/remembered-user";
+import { usernameSchema } from "@/lib/auth-credentials";
 
-import Loader from "./loader";
+type SignUpFormProps = {
+  colors: AuthThemeColors;
+};
 
-export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () => void }) {
-  const navigate = useNavigate({
-    from: "/",
-  });
+export default function SignUpForm({ colors }: SignUpFormProps) {
+  const navigate = useNavigate({ from: "/" });
   const { isPending } = authClient.useSession();
+  const [showPassword, setShowPassword] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(false);
 
   const form = useForm({
     defaultValues: {
       email: "",
       password: "",
-      name: "",
+      username: "",
     },
     onSubmit: async ({ value }) => {
+      if (!agreeTerms) {
+        toast.error("Please accept the Terms of Service to continue.");
+        return;
+      }
+
       await authClient.signUp.email(
         {
           email: value.email,
           password: value.password,
-          name: value.name,
+          name: value.username,
+          username: value.username,
         },
         {
-          onSuccess: () => {
-            navigate({
-              to: "/dashboard",
-            });
-            toast.success("Sign up successful");
+          onSuccess: async () => {
+            const session = await authClient.getSession();
+            if (session.data?.user) {
+              saveRememberedUser(
+                buildRememberedUserFromSession({
+                  loginId: value.username,
+                  signInMethod: "username",
+                  user: session.data.user,
+                }),
+              );
+            } else {
+              saveRememberedUser({
+                loginId: value.username,
+                signInMethod: "username",
+                displayName: value.username,
+                email: value.email,
+                username: value.username,
+              });
+            }
+
+            navigate({ to: "/dashboard" });
+            toast.success("Account created successfully!");
           },
           onError: (error) => {
             toast.error(error.error.message || error.error.statusText);
@@ -44,7 +77,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
     },
     validators: {
       onSubmit: z.object({
-        name: z.string().min(2, "Name must be at least 2 characters"),
+        username: usernameSchema,
         email: z.email("Invalid email address"),
         password: z.string().min(8, "Password must be at least 8 characters"),
       }),
@@ -56,105 +89,103 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
   }
 
   return (
-    <div className="mx-auto w-full mt-10 max-w-md p-6">
-      <h1 className="mb-6 text-center text-3xl font-bold">Create Account</h1>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        form.handleSubmit();
+      }}
+      className="space-y-1"
+    >
+      <form.Field name="username">
+        {(field) => (
+          <M3TextField
+            id="signup-username"
+            label="Username"
+            value={field.state.value}
+            onChange={field.handleChange}
+            onBlur={field.handleBlur}
+            icon={User}
+            colors={colors}
+            autoComplete="username"
+            error={field.state.meta.errors[0]?.message}
+          />
+        )}
+      </form.Field>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
-        className="space-y-4"
-      >
-        <div>
-          <form.Field name="name">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Name</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
+      <form.Field name="email">
+        {(field) => (
+          <M3TextField
+            id="signup-email"
+            label="Email address"
+            type="email"
+            value={field.state.value}
+            onChange={field.handleChange}
+            onBlur={field.handleBlur}
+            icon={Mail}
+            colors={colors}
+            autoComplete="email"
+            error={field.state.meta.errors[0]?.message}
+          />
+        )}
+      </form.Field>
 
-        <div>
-          <form.Field name="email">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Email</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="email"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
+      <form.Field name="password">
+        {(field) => (
+          <M3TextField
+            id="signup-password"
+            label="Create password"
+            type={showPassword ? "text" : "password"}
+            value={field.state.value}
+            onChange={field.handleChange}
+            onBlur={field.handleBlur}
+            icon={KeyRound}
+            endIcon={showPassword ? EyeOff : Eye}
+            onEndIconClick={() => setShowPassword((current) => !current)}
+            hint="Must be at least 8 characters"
+            colors={colors}
+            autoComplete="new-password"
+            error={field.state.meta.errors[0]?.message}
+          />
+        )}
+      </form.Field>
 
-        <div>
-          <form.Field name="password">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Password</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="password"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <form.Subscribe
-          selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
-        >
-          {({ canSubmit, isSubmitting }) => (
-            <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Sign Up"}
-            </Button>
-          )}
-        </form.Subscribe>
-      </form>
-
-      <div className="mt-4 text-center">
-        <Button
-          variant="link"
-          onClick={onSwitchToSignIn}
-          className="text-muted-foreground"
-        >
-          Already have an account? Sign In
-        </Button>
+      <div className="pb-4 pt-1">
+        <label className="flex cursor-pointer select-none items-start gap-2.5 text-left text-xs">
+          <input
+            type="checkbox"
+            checked={agreeTerms}
+            onChange={(e) => setAgreeTerms(e.target.checked)}
+            className="mt-0.5 size-4 rounded border focus:ring-0"
+          />
+          <span className={colors.textSecondary}>
+            I agree to the{" "}
+            <span className={`underline ${colors.primaryText}`}>Terms of Service</span> and{" "}
+            <span className={`underline ${colors.primaryText}`}>Privacy Policy</span>.
+          </span>
+        </label>
       </div>
-    </div>
+
+      <form.Subscribe
+        selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
+      >
+        {({ canSubmit, isSubmitting }) => (
+          <button
+            type="submit"
+            disabled={!canSubmit || isSubmitting}
+            className={`flex w-full items-center justify-center gap-2 rounded-full px-6 py-3.5 text-sm font-bold shadow-sm transition-all hover:shadow-md active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60 ${colors.primary} ${colors.onPrimary} ${colors.primaryHover}`}
+          >
+            {isSubmitting ? (
+              <M3CircularProgress size={18} />
+            ) : (
+              <>
+                <span>Create account</span>
+                <ArrowRight size={16} />
+              </>
+            )}
+          </button>
+        )}
+      </form.Subscribe>
+    </form>
   );
 }

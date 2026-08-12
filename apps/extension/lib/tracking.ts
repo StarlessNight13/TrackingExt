@@ -1,6 +1,17 @@
 import { getApiClient } from "./api";
 import { ensureDeviceRegistered } from "./device";
+import { ensureLocalDeviceId, getEffectiveDeviceId } from "./local-device";
 import { displayHostPath, isExcludedHost, isTrackableUrl, sanitizeUrl } from "./privacy";
+import { pullServerTabsMergedWithLocal } from "./sync/server-bridge";
+import { releaseOfflineTab } from "./sync/offline-store";
+import {
+  syncCreateTab,
+  syncDeleteTab,
+  syncRenameTab,
+  syncTakeOver,
+  syncUpdateTabLocation,
+} from "./sync/router";
+import { isServerSyncActive } from "./sync-modes";
 import { getLocalState, setLocalState } from "./storage";
 import { stripTrackedTabBadge } from "./title-badge";
 import type { ReconnectCandidate, TrackedTab } from "./types";
@@ -36,14 +47,26 @@ function getBoundTabIds(bindings: Record<string, string>, trackedTabId: string) 
     .filter((tabId) => Number.isInteger(tabId));
 }
 
+export async function canUseTrackingFeatures() {
+  const state = await getLocalState();
+  if (state.syncModes.offline || state.syncModes.lan) return true;
+  if (isServerSyncActive(state.syncModes, state.serverUrl, state.sessionToken)) return true;
+  return false;
+}
+
 export async function refreshCachedTabs() {
-  const api = await getApiClient();
-  const tabs = await api.trackedTabs.list();
-  await setLocalState({ cachedTabs: tabs });
-  return tabs;
+  const state = await getLocalState();
+  if (!isServerSyncActive(state.syncModes, state.serverUrl, state.sessionToken)) {
+    return state.cachedTabs;
+  }
+  return pullServerTabsMergedWithLocal();
 }
 
 export async function syncSettings() {
+  const state = await getLocalState();
+  if (!isServerSyncActive(state.syncModes, state.serverUrl, state.sessionToken)) {
+    return state.settings;
+  }
   const api = await getApiClient();
   const settings = await api.settings.get();
   await setLocalState({ settings });
@@ -85,15 +108,22 @@ export async function trackCurrentTab(tabId: number, name?: string, emoji?: stri
   }
 
   const state = await getLocalState();
+  if (!(await canUseTrackingFeatures())) {
+    throw new Error("Enable Offline or Server sync in settings");
+  }
+
   const url = sanitizeUrl(tab.url!, state.settings);
   if (isExcludedHost(url, state.settings.excludedHosts)) {
     throw new Error("This website is excluded from tracking");
   }
 
-  const device = await ensureDeviceRegistered();
-  const api = await getApiClient();
-  const created = await api.trackedTabs.create({
-    deviceId: device.id,
+  if (isServerSyncActive(state.syncModes, state.serverUrl, state.sessionToken)) {
+    await ensureDeviceRegistered();
+  } else {
+    await ensureLocalDeviceId();
+  }
+
+  const created = await syncCreateTab({
     name: name?.trim() || tab.title?.trim() || displayHostPath(url),
     emoji,
     url,
@@ -101,7 +131,6 @@ export async function trackCurrentTab(tabId: number, name?: string, emoji?: stri
   });
 
   await setBinding(tabId, created.id);
-  await refreshCachedTabs();
   await applyTrackedTitleBadge(tabId, created.emoji);
   return created;
 }
@@ -109,33 +138,34 @@ export async function trackCurrentTab(tabId: number, name?: string, emoji?: stri
 export async function stopTracking(trackedTabId: string) {
   const state = await getLocalState();
   await Promise.all(getBoundTabIds(state.bindings, trackedTabId).map(clearTrackedTitleBadge));
-  const api = await getApiClient();
-  await api.trackedTabs.delete({ id: trackedTabId });
+  await syncDeleteTab(trackedTabId);
   await clearBindingsForTrackedTab(trackedTabId);
-  await refreshCachedTabs();
 }
 
 export async function renameTrackedTab(id: string, name: string, emoji?: string | null) {
-  const api = await getApiClient();
-  const updated = await api.trackedTabs.rename({ id, name, emoji });
-  await refreshCachedTabs();
+  const updated = await syncRenameTab(id, name, emoji);
+  if (!updated) throw new Error("Tracked tab not found");
   const state = await getLocalState();
-  await Promise.all(getBoundTabIds(state.bindings, id).map((tabId) => applyTrackedTitleBadge(tabId, updated.emoji)));
+  await Promise.all(
+    getBoundTabIds(state.bindings, id).map((tabId) => applyTrackedTitleBadge(tabId, updated.emoji)),
+  );
   return updated;
 }
 
 export async function takeOver(trackedTabId: string, browserTabId?: number) {
-  const device = await ensureDeviceRegistered();
-  const api = await getApiClient();
-  const updated = await api.trackedTabs.takeOver({
-    id: trackedTabId,
-    deviceId: device.id,
-  });
+  if ((await getLocalState()).syncModes.server) {
+    await ensureDeviceRegistered();
+  } else {
+    await ensureLocalDeviceId();
+  }
+
+  const updated = await syncTakeOver(trackedTabId);
+  if (!updated) throw new Error("Tracked tab not found");
+
   if (browserTabId !== undefined) {
     await setBinding(browserTabId, trackedTabId);
     await applyTrackedTitleBadge(browserTabId, updated.emoji);
   }
-  await refreshCachedTabs();
   return updated;
 }
 
@@ -159,37 +189,30 @@ export async function handleTabUpdate(tabId: number, url?: string, title?: strin
 
   await applyTrackedTitleBadge(tabId, tracked?.emoji);
 
-  if (!state.sessionToken || !state.deviceId || !url) return;
-  if (!isTrackableUrl(url)) return;
+  if (!url || !isTrackableUrl(url)) return;
+  if (!(await canUseTrackingFeatures())) return;
 
   const sanitized = sanitizeUrl(url, state.settings);
   if (isExcludedHost(sanitized, state.settings.excludedHosts)) return;
   const cleanTitle = stripTrackedTabBadge(title ?? null, tracked?.emoji) ?? null;
+  const deviceId = await getEffectiveDeviceId();
 
   if (
     tracked &&
     tracked.currentUrl === sanitized &&
     (tracked.currentTitle ?? null) === cleanTitle &&
-    tracked.activeDeviceId === state.deviceId
+    tracked.activeDeviceId === deviceId
   ) {
     return;
   }
 
   try {
-    const api = await getApiClient();
-    const result = await api.trackedTabs.updateLocation({
-      id: trackedTabId,
-      deviceId: state.deviceId,
+    await syncUpdateTabLocation({
+      tabId: trackedTabId,
       url: sanitized,
       title: cleanTitle,
     });
-    if (!result.skipped) {
-      await setLocalState({
-        cachedTabs: state.cachedTabs.map((t) => (t.id === result.tab.id ? result.tab : t)),
-      });
-    }
   } catch (error) {
-    // Ownership conflict — leave binding but don't push.
     console.warn("Failed to sync tracked tab location", error);
   }
 }
@@ -202,30 +225,27 @@ export async function handleTabRemoved(tabId: number) {
   await clearTrackedTitleBadge(tabId);
   await clearBinding(tabId);
 
-  // Release active ownership if this device held it and no other local tab is bound.
-  if (state.deviceId) {
-    const stillBound = Object.values(
-      (await getLocalState()).bindings,
-    ).includes(trackedTabId);
-    if (!stillBound) {
-      try {
+  const deviceId = await getEffectiveDeviceId();
+  const stillBound = Object.values((await getLocalState()).bindings).includes(trackedTabId);
+  if (!stillBound) {
+    try {
+      if (trackedTabId.startsWith("local_")) {
+        await releaseOfflineTab(trackedTabId, deviceId);
+      } else if (isServerSyncActive(state.syncModes, state.serverUrl, state.sessionToken) && state.deviceId) {
         const api = await getApiClient();
         await api.trackedTabs.release({ id: trackedTabId, deviceId: state.deviceId });
         await refreshCachedTabs();
-      } catch (error) {
-        console.warn("Failed to release tracked tab", error);
       }
+    } catch (error) {
+      console.warn("Failed to release tracked tab", error);
     }
   }
 }
 
-/**
- * After a browser restart, try to reattach restored tabs to tracked items
- * last updated by this device. Ambiguous matches become reconnect prompts.
- */
 export async function reconcileRestoredTabs() {
   const state = await getLocalState();
-  if (!state.sessionToken || !state.deviceId) {
+  const deviceId = state.deviceId ?? state.localDeviceId;
+  if (!deviceId) {
     await setLocalState({ pendingReconnect: [], bindings: {} });
     return;
   }
@@ -234,10 +254,10 @@ export async function reconcileRestoredTabs() {
   try {
     remoteTabs = await refreshCachedTabs();
   } catch {
-    return;
+    remoteTabs = state.cachedTabs;
   }
 
-  const owned = remoteTabs.filter((t) => t.lastUpdatedDeviceId === state.deviceId);
+  const owned = remoteTabs.filter((t) => t.lastUpdatedDeviceId === deviceId);
   const browserTabs = await browser.tabs.query({});
   const trackable = browserTabs.filter((t) => t.id !== undefined && isTrackableUrl(t.url));
 
@@ -246,7 +266,6 @@ export async function reconcileRestoredTabs() {
   const claimedTracked = new Set<string>();
   const claimedBrowser = new Set<number>();
 
-  // Exact unique URL matches first
   for (const tracked of owned) {
     const matches = trackable.filter((t) => {
       if (t.id === undefined || claimedBrowser.has(t.id)) return false;
@@ -264,7 +283,6 @@ export async function reconcileRestoredTabs() {
     }
   }
 
-  // Remaining owned tabs that still look open → ask user
   for (const tracked of owned) {
     if (claimedTracked.has(tracked.id)) continue;
     const matches = trackable.filter((t) => {
