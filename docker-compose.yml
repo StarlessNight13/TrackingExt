@@ -1,28 +1,38 @@
 name: trackingext
 
+# Production shape (single public URL):
+#   https://track.staradox.com      → web :80  (Vite static SPA + nginx)
+#   https://track.staradox.com/api  → proxied to server :3000
+#   https://track.staradox.com/rpc  → proxied to server :3000
+#
+# Dokploy Domains (only one needed for the dashboard):
+#   track.staradox.com → service web → port 80
+#
+# Optional second domain for direct API access (extension can also use the main URL):
+#   api.track.staradox.com → service server → port 3000
+
 services:
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        # Baked at build time — set VITE_SERVER_URL in Dokploy Environment
-        VITE_SERVER_URL: ${VITE_SERVER_URL:-http://localhost:3000}
+        # Must match the public dashboard origin (baked into JS at build time)
+        VITE_SERVER_URL: ${VITE_SERVER_URL:-https://track.staradox.com}
     init: true
     expose:
       - "80"
     networks:
       - dokploy-network
       - default
+    # Required when attached to multiple networks, or Traefik may pick the wrong one
+    labels:
+      - traefik.docker.network=dokploy-network
     depends_on:
       server:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+    # No Docker healthcheck: a failing check makes Traefik return 404 for the domain.
+    # Readiness is logged by apps/web/docker-entrypoint.sh instead.
     restart: unless-stopped
 
   server:
@@ -35,6 +45,8 @@ services:
     networks:
       - dokploy-network
       - default
+    labels:
+      - traefik.docker.network=dokploy-network
     # Dokploy writes UI env vars to .env next to this compose file,
     # but does NOT inject them unless referenced here.
     env_file:
@@ -44,8 +56,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:-file:/data/trackingext.db}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
-      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-https://track.staradox.com}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://track.staradox.com}
       ALLOW_SIGN_UP: ${ALLOW_SIGN_UP:-true}
       DEFAULT_ADMIN_USERNAME: ${DEFAULT_ADMIN_USERNAME:-}
       DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-}
