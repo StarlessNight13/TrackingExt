@@ -1,5 +1,5 @@
 {
-  "name": "@exct/auth",
+  "name": "@trackingext/auth",
   "type": "module",
   "exports": {
     ".": {
@@ -11,14 +11,14 @@
   },
   "scripts": {},
   "dependencies": {
-    "@exct/db": "workspace:*",
-    "@exct/env": "workspace:*",
+    "@trackingext/db": "workspace:*",
+    "@trackingext/env": "workspace:*",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@exct/config": "workspace:*",
+    "@trackingext/config": "workspace:*",
     "typescript": "catalog:"
   }
 }

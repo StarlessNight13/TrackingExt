@@ -1,11 +1,12 @@
 {
-  "name": "@exct/env",
+  "name": "@trackingext/env",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
     "./server": "./src/server.ts",
-    "./web": "./src/web.ts"
+    "./web": "./src/web.ts",
+    "./extension": "./src/extension.ts"
   },
   "dependencies": {
     "@t3-oss/env-core": "^0.13.11",
@@ -13,7 +14,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@exct/config": "workspace:*",
+    "@trackingext/config": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   }

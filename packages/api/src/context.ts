@@ -1,4 +1,4 @@
-import { auth } from "@exct/auth";
+import { auth } from "@trackingext/auth";
 import type { Context as HonoContext } from "hono";
 
 export type CreateContextOptions = {

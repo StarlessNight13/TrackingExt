@@ -1,5 +1,5 @@
-import type { AppRouterClient } from "@exct/api/routers/index";
-import { env } from "@exct/env/web";
+import type { AppRouterClient } from "@trackingext/api/routers/index";
+import { env } from "@trackingext/env/web";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";

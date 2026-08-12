@@ -1,28 +1,32 @@
 {
-  "name": "extension",
-  "version": "0.0.0",
+  "name": "trackingext-extension",
+  "version": "0.1.0",
   "private": true,
-  "description": "manifest.json description",
+  "description": "Cross-browser tracked tabs for TrackingExt",
   "type": "module",
   "scripts": {
-    "dev": "wxt --port 5555",
-    "dev:firefox": "wxt -b firefox",
+    "dev": "wxt --host 0.0.0.0 --port 5555",
+    "dev:firefox": "wxt -b firefox --host 0.0.0.0 --port 5555",
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
+    "check-types": "tsc --noEmit",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "@trackingext/api": "workspace:*",
+    "@trackingext/env": "workspace:*",
+    "@orpc/client": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "@wxt-dev/module-react": "^1.1.5",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "web-ext": "^10.5.0",
     "wxt": "^0.21.3"
   }

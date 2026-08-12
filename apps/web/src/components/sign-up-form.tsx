@@ -1,6 +1,6 @@
-import { Button } from "@exct/ui/components/button";
-import { Input } from "@exct/ui/components/input";
-import { Label } from "@exct/ui/components/label";
+import { Button } from "@trackingext/ui/components/button";
+import { Input } from "@trackingext/ui/components/input";
+import { Label } from "@trackingext/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -150,7 +150,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
         <Button
           variant="link"
           onClick={onSwitchToSignIn}
-          className="text-indigo-600 hover:text-indigo-800"
+          className="text-muted-foreground"
         >
           Already have an account? Sign In
         </Button>

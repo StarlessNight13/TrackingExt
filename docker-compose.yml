@@ -1,4 +1,4 @@
-name: exct
+name: trackingext
 
 services:
   web:

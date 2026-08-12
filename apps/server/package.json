@@ -10,10 +10,10 @@
     "start": "bun run dist/index.mjs"
   },
   "dependencies": {
-    "@exct/api": "workspace:*",
-    "@exct/auth": "workspace:*",
-    "@exct/db": "workspace:*",
-    "@exct/env": "workspace:*",
+    "@trackingext/api": "workspace:*",
+    "@trackingext/auth": "workspace:*",
+    "@trackingext/db": "workspace:*",
+    "@trackingext/env": "workspace:*",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
@@ -23,7 +23,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@exct/config": "workspace:*",
+    "@trackingext/config": "workspace:*",
     "@types/bun": "catalog:",
     "tsdown": "^0.22.14",
     "typescript": "catalog:"

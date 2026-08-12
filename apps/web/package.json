@@ -4,16 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
+    "dev": "vp dev --host 0.0.0.0",
     "build": "vp build",
     "serve": "vp preview",
-    "start": "vp dev",
+    "start": "vp dev --host 0.0.0.0",
     "check-types": "vp build && tsc --noEmit"
   },
   "dependencies": {
-    "@exct/api": "workspace:*",
-    "@exct/env": "workspace:*",
-    "@exct/ui": "workspace:*",
+    "@trackingext/api": "workspace:*",
+    "@trackingext/env": "workspace:*",
+    "@trackingext/ui": "workspace:*",
     "@hookform/resolvers": "^5.5.7",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
@@ -32,7 +32,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@exct/config": "workspace:*",
+    "@trackingext/config": "workspace:*",
     "@tanstack/react-query-devtools": "^5.101.4",
     "@tanstack/react-router-devtools": "^1.167.0",
     "@tanstack/router-plugin": "^1.168.23",

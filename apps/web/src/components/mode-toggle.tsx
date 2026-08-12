@@ -1,10 +1,10 @@
-import { Button } from "@exct/ui/components/button";
+import { Button } from "@trackingext/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@exct/ui/components/dropdown-menu";
+} from "@trackingext/ui/components/dropdown-menu";
 import { Moon, Sun } from "lucide-react";
 
 import { useTheme } from "@/components/theme-provider";

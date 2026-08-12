@@ -1,4 +1,4 @@
-import { env } from "@exct/env/web";
+import { env } from "@trackingext/env/web";
 import { createAuthClient } from "better-auth/react";
 
 function getServerUrl(url: string) {

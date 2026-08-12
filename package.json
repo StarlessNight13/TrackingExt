@@ -1,5 +1,5 @@
 {
-  "name": "exct",
+  "name": "trackingext",
   "private": true,
   "workspaces": {
     "packages": [
@@ -33,38 +33,45 @@
     "build": "vp run -r build",
     "check-types": "vp run -r check-types",
     "check": "oxlint && oxfmt --write",
+    "test": "vp test",
+    "test:watch": "vp test watch",
+    "test:db:push": "DATABASE_URL=\"file:${PWD}/.vitest/test.db\" vp run --filter @trackingext/db db:push",
     "lint": "vp lint",
     "format": "vp fmt",
     "staged": "vp staged",
     "hooks:setup": "vp config",
     "dev:web": "vp run --filter web dev",
     "dev:server": "vp run --filter server dev",
-    "db:push": "vp run --filter @exct/db db:push",
-    "db:studio": "vp run --filter @exct/db db:studio",
-    "db:generate": "vp run --filter @exct/db db:generate",
-    "db:migrate": "vp run --filter @exct/db db:migrate",
-    "db:local": "vp run --filter @exct/db db:local",
+    "dev:extension": "vp run --filter extension dev",
+    "dev:extension:firefox": "vp run --filter extension dev:firefox",
+    "db:push": "vp run --filter @trackingext/db db:push",
+    "db:studio": "vp run --filter @trackingext/db db:studio",
+    "db:generate": "vp run --filter @trackingext/db db:generate",
+    "db:migrate": "vp run --filter @trackingext/db db:migrate",
+    "db:local": "vp run --filter @trackingext/db db:local",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f"
   },
   "dependencies": {
-    "@exct/env": "workspace:*",
+    "@trackingext/env": "workspace:*",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@exct/config": "workspace:*",
+    "@trackingext/config": "workspace:*",
     "@types/bun": "catalog:",
     "oxfmt": "^0.61.0",
     "oxlint": "^1.76.0",
     "rolldown": "1.2.0",
     "typescript": "catalog:",
-    "vite-plus": "0.2.6"
+    "vite-plus": "0.2.6",
+    "vitest": "4.1.10"
   },
   "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.6"
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.6",
+    "vitest": "4.1.10"
   },
   "packageManager": "bun@1.3.6"
 }

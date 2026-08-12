@@ -1,5 +1,5 @@
 {
-  "name": "@exct/api",
+  "name": "@trackingext/api",
   "type": "module",
   "exports": {
     ".": {
@@ -11,18 +11,19 @@
   },
   "scripts": {},
   "dependencies": {
-    "@exct/auth": "workspace:*",
-    "@exct/db": "workspace:*",
-    "@exct/env": "workspace:*",
+    "@trackingext/auth": "workspace:*",
+    "@trackingext/db": "workspace:*",
+    "@trackingext/env": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
     "dotenv": "catalog:",
+    "drizzle-orm": "^0.45.2",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@exct/config": "workspace:*",
+    "@trackingext/config": "workspace:*",
     "hono": "catalog:",
     "typescript": "catalog:"
   }

@@ -12,11 +12,11 @@
   },
   "iconLibrary": "lucide",
   "aliases": {
-    "components": "@exct/ui/components",
-    "utils": "@exct/ui/lib/utils",
-    "hooks": "@exct/ui/hooks",
-    "lib": "@exct/ui/lib",
-    "ui": "@exct/ui/components"
+    "components": "@trackingext/ui/components",
+    "utils": "@trackingext/ui/lib/utils",
+    "hooks": "@trackingext/ui/hooks",
+    "lib": "@trackingext/ui/lib",
+    "ui": "@trackingext/ui/components"
   },
   "menuColor": "default",
   "menuAccent": "subtle",

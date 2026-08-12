@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@exct/ui/components/button";
-import { cn } from "@exct/ui/lib/utils";
+import { Button } from "@trackingext/ui/components/button";
+import { cn } from "@trackingext/ui/lib/utils";
 import {
   MessageScroller as MessageScrollerPrimitive,
   useMessageScroller,

@@ -11,7 +11,7 @@
     "rootDirs": ["."],
     "paths": {
       "@/*": ["./src/*"],
-      "@exct/ui/*": ["../../packages/ui/src/*"]
+      "@trackingext/ui/*": ["../../packages/ui/src/*"]
     }
   }
 }

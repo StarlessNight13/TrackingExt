@@ -1,5 +1,5 @@
 {
-  "name": "@exct/db",
+  "name": "@trackingext/db",
   "type": "module",
   "exports": {
     ".": {
@@ -17,7 +17,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@exct/env": "workspace:*",
+    "@trackingext/env": "workspace:*",
     "@libsql/client": "0.17.4",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.2",
@@ -25,7 +25,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@exct/config": "workspace:*",
+    "@trackingext/config": "workspace:*",
     "drizzle-kit": "^0.31.10",
     "typescript": "catalog:"
   }

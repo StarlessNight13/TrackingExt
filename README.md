@@ -1,4 +1,4 @@
-# exct
+# TrackingExt
 
 This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Router, Hono, ORPC, and more.
 
@@ -71,7 +71,7 @@ npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
 Import shared components like this:
 
 ```tsx
-import { Button } from "@exct/ui/components/button";
+import { Button } from "@trackingext/ui/components/button";
 ```
 
 ### Add app-specific blocks
@@ -102,10 +102,11 @@ For more details, see the guide on [Deploying with Docker Compose](https://www.b
 ## Project Structure
 
 ```
-exct/
+trackingext/
 ├── apps/
 │   ├── web/         # Frontend application (React + TanStack Router)
-│   └── server/      # Backend API (Hono, ORPC)
+│   ├── server/      # Backend API (Hono, ORPC)
+│   └── extension/   # Firefox + Chromium extension (WXT)
 ├── packages/
 │   ├── ui/          # Shared shadcn/ui components and styles
 │   ├── api/         # API layer / business logic
@@ -113,12 +114,29 @@ exct/
 │   └── db/          # Database schema & queries
 ```
 
+## Browser extension
+
+The `apps/extension` package is a WXT extension for **tracked tabs** — persistent activities that keep identity across URL changes and sync via the API.
+
+```bash
+bun run db:push
+bun run dev:server
+bun run dev:extension          # Chromium
+bun run dev:extension:firefox  # Firefox
+```
+
+See `apps/extension/README.md` for behavior details.
+
 ## Available Scripts
 
 - `bun run dev`: Start all applications in development mode
 - `bun run build`: Build all applications
+- `bun run test`: Run Vitest via Vite+ (`vp test`)
+- `bun run test:watch`: Run Vitest in watch mode
 - `bun run dev:web`: Start only the web application
 - `bun run dev:server`: Start only the server
+- `bun run dev:extension`: Start the Chromium extension in WXT
+- `bun run dev:extension:firefox`: Start the Firefox extension in WXT
 - `bun run check-types`: Check TypeScript types across all apps
 - `bun run db:push`: Push schema changes to database
 - `bun run db:generate`: Generate database client/types

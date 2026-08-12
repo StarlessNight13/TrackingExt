@@ -1,9 +1,9 @@
 "use client";
 
-import { Button } from "@exct/ui/components/button";
-import { Input } from "@exct/ui/components/input";
-import { Textarea } from "@exct/ui/components/textarea";
-import { cn } from "@exct/ui/lib/utils";
+import { Button } from "@trackingext/ui/components/button";
+import { Input } from "@trackingext/ui/components/input";
+import { Textarea } from "@trackingext/ui/components/textarea";
+import { cn } from "@trackingext/ui/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 

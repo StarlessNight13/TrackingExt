@@ -1,4 +1,4 @@
-import { env } from "@exct/env/server";
+import { env } from "@trackingext/env/server";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 

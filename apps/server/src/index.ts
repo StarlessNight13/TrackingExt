@@ -1,7 +1,7 @@
-import { createContext } from "@exct/api/context";
-import { appRouter } from "@exct/api/routers/index";
-import { auth } from "@exct/auth";
-import { env } from "@exct/env/server";
+import { createContext } from "@trackingext/api/context";
+import { appRouter } from "@trackingext/api/routers/index";
+import { auth, isTrustedOrigin } from "@trackingext/auth";
+import { env } from "@trackingext/env/server";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { onError } from "@orpc/server";
@@ -17,9 +17,10 @@ app.use(logger());
 app.use(
   "/*",
   cors({
-    origin: env.CORS_ORIGIN,
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    origin: (origin) => (isTrustedOrigin(origin) ? origin : env.CORS_ORIGIN),
+    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
+    exposeHeaders: ["set-auth-token"],
     credentials: true,
   }),
 );

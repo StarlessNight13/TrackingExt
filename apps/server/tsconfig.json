@@ -1,5 +1,5 @@
 {
-  "extends": "@exct/config/tsconfig.base.json",
+  "extends": "@trackingext/config/tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
     "outDir": "dist",

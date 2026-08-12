@@ -1,16 +1,12 @@
-import type { AppRouterClient } from "@exct/api/routers/index";
-import { Toaster } from "@exct/ui/components/sonner";
-import { createORPCClient } from "@orpc/client";
-import { createTanstackQueryUtils } from "@orpc/tanstack-query";
+import { Toaster } from "@trackingext/ui/components/sonner";
 import type { QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { HeadContent, Outlet, createRootRouteWithContext } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { useState } from "react";
 
 import Header from "@/components/header";
 import { ThemeProvider } from "@/components/theme-provider";
-import { link, orpc } from "@/utils/orpc";
+import { orpc } from "@/utils/orpc";
 
 import "../index.css";
 
@@ -24,11 +20,12 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   head: () => ({
     meta: [
       {
-        title: "exct",
+        title: "TrackingExt — Tracked tabs dashboard",
       },
       {
         name: "description",
-        content: "exct is a web application",
+        content:
+          "Manage synced tracked tabs, extension devices, privacy settings, and account sessions.",
       },
     ],
     links: [
@@ -41,15 +38,12 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 });
 
 function RootComponent() {
-  const [client] = useState<AppRouterClient>(() => createORPCClient(link));
-  const [orpcUtils] = useState(() => createTanstackQueryUtils(client));
-
   return (
     <>
       <HeadContent />
       <ThemeProvider
         attribute="class"
-        defaultTheme="dark"
+        defaultTheme="system"
         disableTransitionOnChange
         storageKey="vite-ui-theme"
       >

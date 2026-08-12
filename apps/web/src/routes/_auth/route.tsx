@@ -16,5 +16,9 @@ export const Route = createFileRoute("/_auth")({
 });
 
 function AuthLayout() {
-  return <Outlet />;
+  return (
+    <main className="min-h-0 flex-1 overflow-y-auto bg-background">
+      <Outlet />
+    </main>
+  );
 }

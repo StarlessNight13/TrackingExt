@@ -1,11 +1,11 @@
 {
-  "extends": "@exct/config/tsconfig.base.json",
+  "extends": "@trackingext/config/tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": [],
     "paths": {
-      "@exct/ui/*": ["./src/*"]
+      "@trackingext/ui/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

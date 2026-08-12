@@ -1,4 +1,4 @@
-import { cn } from "@exct/ui/lib/utils";
+import { cn } from "@trackingext/ui/lib/utils";
 import * as React from "react";
 
 function Card({
