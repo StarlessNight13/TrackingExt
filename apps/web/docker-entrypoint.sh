@@ -12,7 +12,8 @@ fi
 
 file_count="$(find "${html_root}" -type f | wc -l | tr -d ' ')"
 echo "Dashboard: static files ready (${file_count} files)"
-echo "Dashboard: binding HTTP on 0.0.0.0:80"
-echo "Dashboard ready: http://0.0.0.0:80"
+echo "Dashboard: nginx listening inside the container on port 80"
+echo "Dashboard: reachable only via Docker networks (dokploy-network) — no host port bind"
+echo "Dashboard ready on container port 80"
 
 exec nginx -g "daemon off;"

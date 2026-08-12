@@ -1,15 +1,18 @@
 name: trackingext
 
-# Production shape (single public URL):
-#   https://track.staradox.com      → web :80  (Vite static SPA + nginx)
-#   https://track.staradox.com/api  → proxied to server :3000
-#   https://track.staradox.com/rpc  → proxied to server :3000
+# Production shape (single public URL via Dokploy/Traefik):
+#   https://track.staradox.com      → web container port 80  (Vite static SPA + nginx)
+#   https://track.staradox.com/api  → proxied by nginx to server:3000
+#   https://track.staradox.com/rpc  → proxied by nginx to server:3000
 #
-# Dokploy Domains (only one needed for the dashboard):
-#   track.staradox.com → service web → port 80
+# Networking rules for Dokploy:
+#   - Do NOT use ports: (that publishes to the host)
+#   - Do NOT use network_mode: host
+#   - Use expose: only (documents container ports on the Docker network)
+#   - Join dokploy-network so Traefik can reach the containers
 #
-# Optional second domain for direct API access (extension can also use the main URL):
-#   api.track.staradox.com → service server → port 3000
+# Dokploy Domains:
+#   track.staradox.com → service web → port 80  (HTTPS terminates at Traefik)
 
 services:
   web:
