@@ -4,7 +4,8 @@ WORKDIR /app
 ENV SKIP_ENV_VALIDATION=1
 
 COPY . .
-RUN --mount=type=cache,target=/root/.bun/install/cache bun install
+# Skip workspace lifecycle scripts (extension `wxt prepare` needs vite and is unused here)
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install --ignore-scripts
 
 ENV NODE_ENV=production
 RUN cd apps/server && bun run build
