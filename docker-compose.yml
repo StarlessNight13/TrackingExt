@@ -11,6 +11,9 @@ services:
     init: true
     expose:
       - "80"
+    networks:
+      - dokploy-network
+      - default
     depends_on:
       server:
         condition: service_healthy
@@ -29,6 +32,9 @@ services:
     init: true
     expose:
       - "3000"
+    networks:
+      - dokploy-network
+      - default
     # Dokploy writes UI env vars to .env next to this compose file,
     # but does NOT inject them unless referenced here.
     env_file:
@@ -55,6 +61,11 @@ services:
         ]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 15s
+      retries: 10
+      start_period: 60s
     restart: unless-stopped
+
+networks:
+  dokploy-network:
+    external: true
+  default:
