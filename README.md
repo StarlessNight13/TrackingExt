@@ -1,154 +1,197 @@
 # TrackingExt
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Router, Hono, ORPC, and more.
+TrackingExt is a self-hosted cross-browser tab continuity system.
 
-## Features
+It lets a user explicitly mark a browser tab as a **tracked activity** instead of just saving a URL. Once tracked, that tab keeps the same identity as the user navigates inside it, and its latest location syncs to the user account so it can be reopened from another browser or device.
 
-- **TypeScript** - For type safety and improved developer experience
-- **TanStack Router** - File-based routing with full type safety
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
-- **Hono** - Lightweight, performant server framework
-- **oRPC** - End-to-end type-safe APIs with OpenAPI integration
-- **Bun** - Runtime environment
-- **Drizzle** - TypeScript-first ORM
-- **SQLite/Turso** - Database engine
-- **Authentication** - Better-Auth
-- **Oxlint** - Oxlint + Oxfmt (linting & formatting)
-- **Vite+** - Unified Vite toolchain, workspace task runner, linting, and formatting
+Example:
 
-## Getting Started
+`Chapter 10 -> Chapter 11 -> Chapter 12 -> Chapter 13`
 
-First, install the dependencies:
+TrackingExt treats that as one logical activity, not four unrelated pages.
+
+## What it does
+
+TrackingExt is built around **persistent tracked tabs**:
+
+- A user chooses **Track this tab** in the extension popup or context menu.
+- That tab becomes a tracked item with its own identity.
+- As the page URL or title changes, the tracked item updates instead of creating a new item.
+- The latest location syncs to the backend and appears in the dashboard and other signed-in extension installs.
+- Another device can open the activity and optionally **take over** ownership so only one device actively updates it.
+
+This is different from syncing every open browser tab. Tracking is always explicit.
+
+## Main features
+
+- **Cross-browser extension support** for Chromium-based browsers and Firefox
+- **Cross-device continuation** across multiple browsers and machines on the same account
+- **Tracked-tab history** per activity, separate from normal browser history
+- **Ownership / take over** flow to prevent two devices fighting over the same tracked activity
+- **Reconnect after restart** when a restored browser tab can be matched back to a tracked activity
+- **Privacy controls** for:
+  - enabling/disabling tracked-tab history
+  - stripping URL query parameters
+  - stripping URL fragments
+  - excluding sites from tracking
+- **Self-hosted endpoint setup** in the extension popup
+- **Dashboard management** for tracked tabs, devices, privacy settings, sessions, and extension install links
+
+## Project layout
+
+TrackingExt is a monorepo with three main app surfaces:
+
+- `apps/server`  
+  Hono + oRPC backend for auth, tracked tabs, device registration, history, and settings.
+
+- `apps/web`  
+  Browser dashboard for signing in, viewing tracked activities, managing devices/sessions, and extension setup.
+
+- `apps/extension`  
+  WXT browser extension for Firefox and Chromium that tracks tabs and syncs them to the backend.
+
+Supporting packages live in `packages/*`:
+
+- `packages/api` - shared API contracts and routers
+- `packages/auth` - Better Auth setup
+- `packages/db` - schema and database access
+- `packages/env` - typed environment handling
+- `packages/ui` - shared UI primitives
+
+## How the system works
+
+### Extension
+
+The extension is where tracking starts.
+
+- The popup shows the current page and whether it is tracked.
+- Users can track, stop tracking, rename, view history, and take over activities.
+- A context-menu action adds **Track this tab** from the right-click menu.
+- Tracked tabs get a visible marker in the tab title.
+- The extension syncs only tracked tabs, never general browsing activity.
+
+### Dashboard
+
+The dashboard is the management UI.
+
+- View all tracked activities and their latest URLs
+- Open the latest location from another device
+- See which device updated an activity most recently
+- Manage privacy settings
+- Rename devices
+- Revoke sessions
+- Show install cards for Chromium and Firefox with store/download links
+
+### Backend
+
+The backend stores:
+
+- users and sessions
+- registered devices
+- tracked tabs
+- tracked-tab history
+- user privacy settings
+
+## Development
+
+Install dependencies:
 
 ```bash
 bun install
 ```
 
-## Database Setup
-
-This project uses SQLite with Drizzle ORM.
-
-1. Start the local SQLite database (optional):
-
-```bash
-bun run db:local
-```
-
-2. Update your `.env` file in the `apps/server` directory with the appropriate connection details if needed.
-
-3. Apply the schema to your database:
+Apply the database schema:
 
 ```bash
 bun run db:push
 ```
 
-Then, run the development server:
+Start the web dashboard and backend:
 
 ```bash
-bun run dev
-```
-
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
-The API is running at [http://localhost:3000](http://localhost:3000).
-
-## UI Customization
-
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
-
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
-
-### Add more shared components
-
-Run this from the project root to add more primitives to the shared UI package:
-
-```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
-```
-
-Import shared components like this:
-
-```tsx
-import { Button } from "@trackingext/ui/components/button";
-```
-
-### Add app-specific blocks
-
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
-
-## Deployment
-
-### Docker Compose
-
-- Target: web + server
-- Config: `docker-compose.yml` (app Dockerfiles live in `apps/*/Dockerfile`)
-- Build images: bun run docker:build
-- Start: bun run docker:up
-- Logs: bun run docker:logs
-- Stop: bun run docker:down
-
-Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
-
-For more details, see the guide on [Deploying with Docker Compose](https://www.better-t-stack.dev/docs/guides/docker).
-
-## Git Hooks and Formatting
-
-- Optional native Vite+ hooks: `bun run hooks:setup`
-- Docs: [Vite+ commit hooks](https://viteplus.dev/guide/commit-hooks)
-- Run checks: `bun run check`
-
-## Project Structure
-
-```
-trackingext/
-├── apps/
-│   ├── web/         # Frontend application (React + TanStack Router)
-│   ├── server/      # Backend API (Hono, ORPC)
-│   └── extension/   # Firefox + Chromium extension (WXT)
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── api/         # API layer / business logic
-│   ├── auth/        # Authentication configuration & logic
-│   └── db/          # Database schema & queries
-```
-
-## Browser extension
-
-The `apps/extension` package is a WXT extension for **tracked tabs** — persistent activities that keep identity across URL changes and sync via the API.
-
-```bash
-bun run db:push
 bun run dev:server
-bun run dev:extension          # Chromium
-bun run dev:extension:firefox  # Firefox
+bun run dev:web
 ```
 
-See `apps/extension/README.md` for behavior details.
+Default local URLs:
 
-## Available Scripts
+- dashboard: [http://localhost:3001](http://localhost:3001)
+- API/auth server: [http://localhost:3000](http://localhost:3000)
 
-- `bun run dev`: Start all applications in development mode
-- `bun run build`: Build all applications
-- `bun run test`: Run Vitest via Vite+ (`vp test`)
-- `bun run test:watch`: Run Vitest in watch mode
-- `bun run dev:web`: Start only the web application
-- `bun run dev:server`: Start only the server
-- `bun run dev:extension`: Start the Chromium extension in WXT
-- `bun run dev:extension:firefox`: Start the Firefox extension in WXT
-- `bun run check-types`: Check TypeScript types across all apps
-- `bun run db:push`: Push schema changes to database
-- `bun run db:generate`: Generate database client/types
-- `bun run db:migrate`: Run database migrations
-- `bun run db:studio`: Open database studio UI
-- `bun run db:local`: Start the local SQLite database
-- `bun run check`: Run Vite+ format/lint checks and workspace TypeScript checks
-- `bun run lint`: Run Vite+ lint checks
-- `bun run format`: Run Vite+ formatting
-- `bun run staged`: Run Vite+ checks against staged files
-- `bun run hooks:setup`: Install Vite+ native Git hooks with `vp config`
-- `bun run docker:build`: Build the Docker Compose images
-- `bun run docker:up`: Build and start the Docker Compose stack
-- `bun run docker:logs`: Tail logs from the Docker Compose stack
-- `bun run docker:down`: Stop the Docker Compose stack
+## Extension development
+
+The extension needs a real browser, so run it on a machine with a desktop session.
+
+Chromium:
+
+```bash
+bun run dev:extension
+```
+
+Firefox:
+
+```bash
+bun run dev:extension:firefox
+```
+
+On first run, the extension asks for the TrackingExt server URL. After that, sign in with the same account used in the dashboard.
+
+If your backend is on another machine, point the extension at that reachable server origin.
+
+See `apps/extension/README.md` for extension-specific behavior.
+
+## Self-hosting
+
+TrackingExt is intended to be self-hosted.
+
+For a production-style local stack:
+
+```bash
+bun run docker:build
+bun run docker:up
+```
+
+Useful Docker commands:
+
+- `bun run docker:logs`
+- `bun run docker:down`
+
+The dashboard supports env-configured browser store links and download URLs for extension packages.
+
+## Testing and checks
+
+- `bun run test` - run the root test suite
+- `bun run build` - build all apps
+- `bun run check-types` - workspace type checks
+- `bun run lint` - lint checks
+- `bun run format` - formatting
+
+## Available scripts
+
+- `bun run dev` - start all app dev scripts
+- `bun run dev:web` - dashboard only
+- `bun run dev:server` - backend only
+- `bun run dev:extension` - Chromium extension dev
+- `bun run dev:extension:firefox` - Firefox extension dev
+- `bun run db:push` - push schema changes
+- `bun run db:generate` - generate DB artifacts
+- `bun run db:migrate` - run DB migrations
+- `bun run db:studio` - open DB studio
+- `bun run docker:build` - build Docker images
+- `bun run docker:up` - start Docker stack
+- `bun run docker:logs` - tail Docker logs
+- `bun run docker:down` - stop Docker stack
+
+## Tech stack
+
+- Bun
+- TypeScript
+- React
+- TanStack Router
+- Hono
+- oRPC
+- Better Auth
+- Drizzle
+- SQLite / Turso
+- WXT
+- shared UI primitives in `packages/ui`
