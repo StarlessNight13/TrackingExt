@@ -3,11 +3,27 @@ import { eq } from "drizzle-orm";
 import { db } from "@trackingext/db";
 import { userSettings } from "@trackingext/db/schema/tracked";
 
+import {
+  DASHBOARD_THEME_VARIANTS,
+  DEFAULT_DASHBOARD_THEME_SEED,
+  DEFAULT_DASHBOARD_THEME_VARIANT,
+  type DashboardThemeVariant,
+} from "./settings.constants";
+
+export {
+  DASHBOARD_THEME_VARIANTS,
+  DEFAULT_DASHBOARD_THEME_SEED,
+  DEFAULT_DASHBOARD_THEME_VARIANT,
+  type DashboardThemeVariant,
+} from "./settings.constants";
+
 export type PrivacySettings = {
   recordHistory: boolean;
   stripQueryParams: boolean;
   stripFragments: boolean;
   excludedHosts: string[];
+  dashboardThemeSeed: string;
+  dashboardThemeVariant: DashboardThemeVariant;
 };
 
 const DEFAULT_SETTINGS: PrivacySettings = {
@@ -15,6 +31,8 @@ const DEFAULT_SETTINGS: PrivacySettings = {
   stripQueryParams: false,
   stripFragments: true,
   excludedHosts: [],
+  dashboardThemeSeed: DEFAULT_DASHBOARD_THEME_SEED,
+  dashboardThemeVariant: DEFAULT_DASHBOARD_THEME_VARIANT,
 };
 
 export function parseExcludedHosts(raw: string): string[] {
@@ -38,6 +56,10 @@ export async function getOrCreateSettings(userId: string): Promise<PrivacySettin
       stripQueryParams: existing.stripQueryParams,
       stripFragments: existing.stripFragments,
       excludedHosts: parseExcludedHosts(existing.excludedHosts),
+      dashboardThemeSeed: existing.dashboardThemeSeed,
+      dashboardThemeVariant:
+        DASHBOARD_THEME_VARIANTS.find((variant) => variant === existing.dashboardThemeVariant) ??
+        DEFAULT_SETTINGS.dashboardThemeVariant,
     };
   }
 
@@ -63,5 +85,9 @@ export async function getOrCreateSettings(userId: string): Promise<PrivacySettin
     stripQueryParams: created.stripQueryParams,
     stripFragments: created.stripFragments,
     excludedHosts: parseExcludedHosts(created.excludedHosts),
+    dashboardThemeSeed: created.dashboardThemeSeed,
+    dashboardThemeVariant:
+      DASHBOARD_THEME_VARIANTS.find((variant) => variant === created.dashboardThemeVariant) ??
+      DEFAULT_SETTINGS.dashboardThemeVariant,
   };
 }

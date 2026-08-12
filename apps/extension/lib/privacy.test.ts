@@ -6,14 +6,9 @@ import {
   isTrackableUrl,
   sanitizeUrl,
 } from "./privacy";
-import type { PrivacySettings } from "./types";
+import { DEFAULT_SETTINGS, type PrivacySettings } from "./types";
 
-const baseSettings: PrivacySettings = {
-  recordHistory: true,
-  stripQueryParams: false,
-  stripFragments: true,
-  excludedHosts: [],
-};
+const baseSettings: PrivacySettings = DEFAULT_SETTINGS;
 
 describe("isTrackableUrl", () => {
   it("accepts http and https URLs", () => {

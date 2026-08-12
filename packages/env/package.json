@@ -6,7 +6,8 @@
   "exports": {
     "./server": "./src/server.ts",
     "./web": "./src/web.ts",
-    "./extension": "./src/extension.ts"
+    "./extension": "./src/extension.ts",
+    "./cors-origins": "./src/cors-origins.ts"
   },
   "dependencies": {
     "@t3-oss/env-core": "^0.13.11",

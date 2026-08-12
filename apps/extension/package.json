@@ -19,6 +19,7 @@
     "@trackingext/api": "workspace:*",
     "@trackingext/env": "workspace:*",
     "@orpc/client": "catalog:",
+    "material-shadcn": "^0.0.1-alpha.2",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

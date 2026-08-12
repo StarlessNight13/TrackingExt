@@ -4,6 +4,9 @@ export type SessionUser = {
   id: string;
   name: string;
   email: string;
+  username?: string | null;
+  displayUsername?: string | null;
+  image?: string | null;
 };
 
 async function authFetch(path: string, init: RequestInit & { token?: string | null } = {}) {
@@ -21,10 +24,14 @@ async function authFetch(path: string, init: RequestInit & { token?: string | nu
   return res;
 }
 
-export async function signIn(email: string, password: string) {
-  const res = await authFetch("/sign-in/email", {
+export async function signIn(usernameOrEmail: string, password: string) {
+  const body = usernameOrEmail.includes("@")
+    ? { email: usernameOrEmail, password }
+    : { username: usernameOrEmail, password };
+  const path = usernameOrEmail.includes("@") ? "/sign-in/email" : "/sign-in/username";
+  const res = await authFetch(path, {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   });
   const data = (await res.json().catch(() => ({}))) as {
     token?: string;
@@ -43,10 +50,10 @@ export async function signIn(email: string, password: string) {
   return { token, user: data.user };
 }
 
-export async function signUp(name: string, email: string, password: string) {
+export async function signUp(username: string, email: string, password: string) {
   const res = await authFetch("/sign-up/email", {
     method: "POST",
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name: username, username, email, password }),
   });
   const data = (await res.json().catch(() => ({}))) as {
     token?: string;

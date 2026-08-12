@@ -1,7 +1,10 @@
+import "dotenv/config";
+
 import { createContext } from "@trackingext/api/context";
 import { appRouter } from "@trackingext/api/routers/index";
-import { auth, isTrustedOrigin } from "@trackingext/auth";
+import { auth, getAuthPublicConfig, seedDefaultAdminUser } from "@trackingext/auth";
 import { env } from "@trackingext/env/server";
+import { resolveCorsOrigin } from "@trackingext/env/cors-origins";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { onError } from "@orpc/server";
@@ -17,7 +20,7 @@ app.use(logger());
 app.use(
   "/*",
   cors({
-    origin: (origin) => (isTrustedOrigin(origin) ? origin : env.CORS_ORIGIN),
+    origin: (origin) => resolveCorsOrigin(origin, env.CORS_ORIGIN),
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["set-auth-token"],
@@ -25,7 +28,17 @@ app.use(
   }),
 );
 
+app.get("/api/auth/config", (c) => c.json(getAuthPublicConfig()));
+
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+void seedDefaultAdminUser().then((result) => {
+  if (result.created) {
+    console.log("Seeded default admin user");
+  }
+}).catch((error) => {
+  console.error("Failed to seed default admin user:", error);
+});
 
 export const apiHandler = new OpenAPIHandler(appRouter, {
   plugins: [
