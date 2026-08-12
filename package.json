@@ -1,0 +1,70 @@
+{
+  "name": "exct",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "dotenv": "^17.4.2",
+      "zod": "^4.4.3",
+      "typescript": "^6.0.3",
+      "@types/bun": "^1.3.14",
+      "hono": "^4.12.32",
+      "@orpc/server": "^1.14.12",
+      "@orpc/openapi": "^1.14.12",
+      "@orpc/zod": "^1.14.12",
+      "better-auth": "1.6.25",
+      "lucide-react": "^1.27.0",
+      "next-themes": "^0.4.6",
+      "react": "^19.2.8",
+      "react-dom": "^19.2.8",
+      "sonner": "^2.0.7",
+      "@orpc/client": "^1.14.12",
+      "@types/react": "^19.2.17",
+      "@types/react-dom": "^19.2.3",
+      "tailwindcss": "^4.3.3"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vp run -r dev",
+    "build": "vp run -r build",
+    "check-types": "vp run -r check-types",
+    "check": "oxlint && oxfmt --write",
+    "lint": "vp lint",
+    "format": "vp fmt",
+    "staged": "vp staged",
+    "hooks:setup": "vp config",
+    "dev:web": "vp run --filter web dev",
+    "dev:server": "vp run --filter server dev",
+    "db:push": "vp run --filter @exct/db db:push",
+    "db:studio": "vp run --filter @exct/db db:studio",
+    "db:generate": "vp run --filter @exct/db db:generate",
+    "db:migrate": "vp run --filter @exct/db db:migrate",
+    "db:local": "vp run --filter @exct/db db:local",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "dependencies": {
+    "@exct/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@exct/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "oxfmt": "^0.61.0",
+    "oxlint": "^1.76.0",
+    "rolldown": "1.2.0",
+    "typescript": "catalog:",
+    "vite-plus": "0.2.6"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.6"
+  },
+  "packageManager": "bun@1.3.6"
+}

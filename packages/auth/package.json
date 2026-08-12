@@ -1,0 +1,24 @@
+{
+  "name": "@exct/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@exct/db": "workspace:*",
+    "@exct/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@exct/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

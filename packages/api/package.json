@@ -1,0 +1,29 @@
+{
+  "name": "@exct/api",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@exct/auth": "workspace:*",
+    "@exct/db": "workspace:*",
+    "@exct/env": "workspace:*",
+    "@orpc/client": "catalog:",
+    "@orpc/openapi": "catalog:",
+    "@orpc/server": "catalog:",
+    "@orpc/zod": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@exct/config": "workspace:*",
+    "hono": "catalog:",
+    "typescript": "catalog:"
+  }
+}
