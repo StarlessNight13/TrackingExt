@@ -7,11 +7,13 @@ COPY . .
 # Skip workspace lifecycle scripts (extension `wxt prepare` needs vite and is unused here)
 RUN --mount=type=cache,target=/root/.bun/install/cache bun install --ignore-scripts
 
+RUN chmod +x /app/apps/server/docker-entrypoint.sh
+
 ENV SKIP_ENV_VALIDATION=
 ENV NODE_ENV=production
 
 EXPOSE 3000
 
 WORKDIR /app/apps/server
-# Run from source: the tsdown bundle cannot resolve libsql native bindings under Bun's linker
-CMD ["bun", "run", "src/index.ts"]
+# Entrypoint pushes Drizzle schema (creates tables) then starts the API
+CMD ["/app/apps/server/docker-entrypoint.sh"]

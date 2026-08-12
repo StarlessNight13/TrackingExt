@@ -32,9 +32,17 @@ services:
     # Dokploy writes UI env vars to .env next to this compose file,
     # but does NOT inject them unless referenced here.
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-file:/data/trackingext.db}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      ALLOW_SIGN_UP: ${ALLOW_SIGN_UP:-true}
+      DEFAULT_ADMIN_USERNAME: ${DEFAULT_ADMIN_USERNAME:-}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-}
     volumes:
       - ../files/trackingext-db:/data
     healthcheck:
