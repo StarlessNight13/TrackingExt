@@ -33,6 +33,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { displayHostPath } from "@/lib/format";
+import { MenuSelect } from "@/components/menu-select";
 import { orpc } from "@/utils/orpc";
 
 export function CollectionsPanel() {
@@ -145,7 +146,7 @@ export function CollectionsPanel() {
         </Empty>
       ) : null}
 
-      <div className="flex flex-col gap-3">
+      <div className="card-stack">
         {collections.map((collection) => (
           <Card key={collection.id}>
             <CardHeader>
@@ -238,24 +239,28 @@ export function CollectionsPanel() {
             <DialogTitle>New collection</DialogTitle>
             <DialogDescription>Name a workspace and optionally add notes.</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="collection-name">Name</Label>
-            <Input
-              id="collection-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              autoFocus
-            />
-            <Label htmlFor="collection-notes">Notes</Label>
-            <Textarea
-              id="collection-notes"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              rows={4}
-            />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="collection-name">Name</Label>
+              <Input
+                id="collection-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="collection-notes">Notes</Label>
+              <Textarea
+                id="collection-notes"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                rows={4}
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button variant="ghost" className="text-primary" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
             <Button
@@ -281,47 +286,54 @@ export function CollectionsPanel() {
               Update notes and choose which activity is pinned as next.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="edit-collection-name">Name</Label>
-            <Input
-              id="edit-collection-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-            <Label htmlFor="edit-collection-notes">Notes</Label>
-            <Textarea
-              id="edit-collection-notes"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              rows={4}
-            />
-            <Label htmlFor="edit-collection-pin">Pinned next activity</Label>
-            <select
-              id="edit-collection-pin"
-              className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-              value={pinnedId}
-              onChange={(event) => setPinnedId(event.target.value)}
-            >
-              <option value="">None</option>
-              {tabs
-                .filter((tab) => !editing || tab.collectionId === editing.id || !tab.collectionId)
-                .map((tab) => (
-                  <option key={tab.id} value={tab.id}>
-                    {tab.emoji ? `${tab.emoji} ` : ""}
-                    {tab.name}
-                  </option>
-                ))}
-              {editing?.pinnedActivity &&
-              !tabs.some((tab) => tab.id === editing.pinnedActivity?.id) ? (
-                <option value={editing.pinnedActivity.id}>
-                  {editing.pinnedActivity.emoji ? `${editing.pinnedActivity.emoji} ` : ""}
-                  {editing.pinnedActivity.name}
-                </option>
-              ) : null}
-            </select>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-collection-name">Name</Label>
+              <Input
+                id="edit-collection-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-collection-notes">Notes</Label>
+              <Textarea
+                id="edit-collection-notes"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                rows={4}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-collection-pin">Pinned next activity</Label>
+              <MenuSelect
+                id="edit-collection-pin"
+                aria-label="Pinned next activity"
+                value={pinnedId}
+                onValueChange={setPinnedId}
+                options={[
+                  { value: "", label: "None" },
+                  ...tabs
+                    .filter((tab) => !editing || tab.collectionId === editing.id || !tab.collectionId)
+                    .map((tab) => ({
+                      value: tab.id,
+                      label: `${tab.emoji ? `${tab.emoji} ` : ""}${tab.name}`,
+                    })),
+                  ...(editing?.pinnedActivity &&
+                  !tabs.some((tab) => tab.id === editing.pinnedActivity?.id)
+                    ? [
+                        {
+                          value: editing.pinnedActivity.id,
+                          label: `${editing.pinnedActivity.emoji ? `${editing.pinnedActivity.emoji} ` : ""}${editing.pinnedActivity.name}`,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingId(null)}>
+            <Button variant="ghost" className="text-primary" onClick={() => setEditingId(null)}>
               Cancel
             </Button>
             <Button

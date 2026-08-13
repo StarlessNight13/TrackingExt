@@ -170,7 +170,7 @@ export function SessionsPanel() {
         </CardFooter>
       </Card>
 
-      <div className="flex flex-col gap-3">
+      <div className="card-stack">
         {sessions.map((session) => {
           const isCurrent = Boolean(currentToken && session.token === currentToken);
           return (

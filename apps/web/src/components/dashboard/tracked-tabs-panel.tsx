@@ -27,6 +27,11 @@ import {
   EmptyTitle,
 } from "@trackingext/ui/components/empty";
 import { Input } from "@trackingext/ui/components/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@trackingext/ui/components/input-group";
 import { Label } from "@trackingext/ui/components/label";
 import { Skeleton } from "@trackingext/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -62,6 +67,7 @@ import {
   slugifyFilename,
 } from "@/lib/activity-export";
 import { displayHostPath, relativeTime } from "@/lib/format";
+import { MenuSelect } from "@/components/menu-select";
 import { orpc } from "@/utils/orpc";
 
 type HistoryEntry = {
@@ -231,6 +237,23 @@ export function TrackedTabsPanel() {
     onError: (error) => toast.error(error.message),
   });
 
+  const historyEntries = useMemo(() => {
+    const query = historySearch.trim().toLocaleLowerCase();
+    const entries = (historyQuery.data as HistoryEntry[] | undefined) ?? [];
+    return query
+      ? entries.filter((entry) =>
+          `${entry.title ?? ""} ${entry.url}`.toLocaleLowerCase().includes(query),
+        )
+      : entries;
+  }, [historyQuery.data, historySearch]);
+  const historyUrls = useMemo(
+    () =>
+      ((historyQuery.data as HistoryEntry[] | undefined) ?? []).map((entry) =>
+        displayHostPath(entry.url),
+      ),
+    [historyQuery.data],
+  );
+
   if (tabsQuery.isLoading) {
     return (
       <div className="flex flex-col gap-3">
@@ -280,22 +303,6 @@ export function TrackedTabsPanel() {
   const unhealthyCount = tabs.filter((tab) => tab.health.issues.length > 0).length;
   const collections = collectionsQuery.data ?? [];
   const selectedVisibleIds = tabs.filter((tab) => selectedIds.has(tab.id)).map((tab) => tab.id);
-  const historyEntries = useMemo(() => {
-    const query = historySearch.trim().toLocaleLowerCase();
-    const entries = (historyQuery.data as HistoryEntry[] | undefined) ?? [];
-    return query
-      ? entries.filter((entry) =>
-          `${entry.title ?? ""} ${entry.url}`.toLocaleLowerCase().includes(query),
-        )
-      : entries;
-  }, [historyQuery.data, historySearch]);
-  const historyUrls = useMemo(
-    () =>
-      ((historyQuery.data as HistoryEntry[] | undefined) ?? []).map((entry) =>
-        displayHostPath(entry.url),
-      ),
-    [historyQuery.data],
-  );
 
   const toggleSelected = (id: string, checked: boolean) => {
     setSelectedIds((current) => {
@@ -308,49 +315,80 @@ export function TrackedTabsPanel() {
 
   return (
     <>
-      <Card>
-        <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row">
-          <div className="flex flex-1 items-center gap-2">
-            <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search activities, sites, or tags"
-              aria-label="Search tracked activities"
-            />
+      <Card variant="filled" className="activity-toolbar">
+        <CardContent className="activity-toolbar__content flex flex-col gap-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="activity-toolbar__search-field flex-1">
+              <label className="activity-toolbar__search-label" htmlFor="activity-search">
+                Search activities
+              </label>
+              <InputGroup className="activity-toolbar__search h-14">
+                <InputGroupInput
+                  id="activity-search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Sites, activities, or tags"
+                  className="h-14 px-2 text-sm"
+                />
+                <InputGroupAddon align="inline-start" className="pl-4">
+                  <Search className="size-5" aria-hidden="true" />
+                </InputGroupAddon>
+              </InputGroup>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="default"
+                size="lg"
+                className="activity-toolbar__view-toggle min-w-28"
+                aria-pressed={view === "archived"}
+                onClick={() => setView((current) => (current === "active" ? "archived" : "active"))}
+              >
+                {view === "active" ? "Active" : "Archived"}
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <select
-              className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-              value={collectionFilter}
-              onChange={(event) => setCollectionFilter(event.target.value)}
-              aria-label="Filter by collection"
-            >
-              <option value="all">All collections</option>
-              <option value="none">Ungrouped</option>
+          <div className="activity-toolbar__collections" role="tablist" aria-label="Filter by collection">
+              <Button
+                variant="ghost"
+                size="lg"
+                role="tab"
+                className="activity-toolbar__collection-chip"
+                aria-selected={collectionFilter === "all"}
+                data-active={collectionFilter === "all" || undefined}
+                onClick={() => setCollectionFilter("all")}
+              >
+                All
+              </Button>
+              <Button
+                variant="ghost"
+                size="lg"
+                role="tab"
+                className="activity-toolbar__collection-chip"
+                aria-selected={collectionFilter === "none"}
+                data-active={collectionFilter === "none" || undefined}
+                onClick={() => setCollectionFilter("none")}
+              >
+                Ungrouped
+              </Button>
               {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>
+                <Button
+                  key={collection.id}
+                  variant="ghost"
+                  size="lg"
+                  role="tab"
+                  className="activity-toolbar__collection-chip"
+                  aria-selected={collectionFilter === collection.id}
+                  data-active={collectionFilter === collection.id || undefined}
+                  onClick={() => setCollectionFilter(collection.id)}
+                >
                   {collection.name}
-                </option>
+                </Button>
               ))}
-            </select>
-            <Button
-              variant={view === "active" ? "default" : "outline"}
-              onClick={() => setView("active")}
-            >
-              Active
-            </Button>
-            <Button
-              variant={view === "archived" ? "default" : "outline"}
-              onClick={() => setView("archived")}
-            >
-              Archived
-            </Button>
           </div>
         </CardContent>
       </Card>
       {unhealthyCount > 0 ? (
-        <Card>
+        <Card variant="outlined">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <TriangleAlert className="size-4" />
@@ -427,7 +465,7 @@ export function TrackedTabsPanel() {
           </EmptyHeader>
         </Empty>
       ) : null}
-      <div className="flex flex-col gap-3">
+      <div className="card-stack">
         {tabs.map((tab) => (
           <Card key={tab.id}>
             <CardHeader className="gap-2">
@@ -599,36 +637,42 @@ export function TrackedTabsPanel() {
               Update the name, tags, collection, and private mode for this activity.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="tracked-name">Name</Label>
-            <Input
-              id="tracked-name"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              autoFocus
-            />
-            <Label htmlFor="tracked-tags">Tags</Label>
-            <Input
-              id="tracked-tags"
-              value={editTags}
-              onChange={(e) => setEditTags(e.target.value)}
-              placeholder="research, work"
-            />
-            <Label htmlFor="tracked-collection">Collection</Label>
-            <select
-              id="tracked-collection"
-              className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-              value={editCollectionId}
-              onChange={(event) => setEditCollectionId(event.target.value)}
-            >
-              <option value="">Ungrouped</option>
-              {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>
-                  {collection.name}
-                </option>
-              ))}
-            </select>
-            <label className="flex items-center gap-2 pt-2 text-sm">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="tracked-name">Name</Label>
+              <Input
+                id="tracked-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="tracked-tags">Tags</Label>
+              <Input
+                id="tracked-tags"
+                value={editTags}
+                onChange={(e) => setEditTags(e.target.value)}
+                placeholder="research, work"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="tracked-collection">Collection</Label>
+              <MenuSelect
+                id="tracked-collection"
+                aria-label="Collection"
+                value={editCollectionId}
+                onValueChange={setEditCollectionId}
+                options={[
+                  { value: "", label: "Ungrouped" },
+                  ...collections.map((collection) => ({
+                    value: collection.id,
+                    label: collection.name,
+                  })),
+                ]}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={editPrivate}
                 onCheckedChange={(checked) => setEditPrivate(checked === true)}
@@ -637,7 +681,7 @@ export function TrackedTabsPanel() {
             </label>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingId(null)}>
+            <Button variant="ghost" className="text-primary" onClick={() => setEditingId(null)}>
               Cancel
             </Button>
             <Button
@@ -738,7 +782,7 @@ export function TrackedTabsPanel() {
             autoFocus
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkTagsOpen(false)}>
+            <Button variant="ghost" className="text-primary" onClick={() => setBulkTagsOpen(false)}>
               Cancel
             </Button>
             <Button
@@ -768,21 +812,20 @@ export function TrackedTabsPanel() {
               Assign the selected activities to a collection, or leave them ungrouped.
             </DialogDescription>
           </DialogHeader>
-          <select
-            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-            value={bulkMoveCollectionId}
-            onChange={(event) => setBulkMoveCollectionId(event.target.value)}
+          <MenuSelect
             aria-label="Destination collection"
-          >
-            <option value="">Ungrouped</option>
-            {collections.map((collection) => (
-              <option key={collection.id} value={collection.id}>
-                {collection.name}
-              </option>
-            ))}
-          </select>
+            value={bulkMoveCollectionId}
+            onValueChange={setBulkMoveCollectionId}
+            options={[
+              { value: "", label: "Ungrouped" },
+              ...collections.map((collection) => ({
+                value: collection.id,
+                label: collection.name,
+              })),
+            ]}
+          />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkMoveOpen(false)}>
+            <Button variant="ghost" className="text-primary" onClick={() => setBulkMoveOpen(false)}>
               Cancel
             </Button>
             <Button
@@ -890,7 +933,7 @@ export function TrackedTabsPanel() {
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setExportTabId(null)}>
+            <Button variant="ghost" className="text-primary" onClick={() => setExportTabId(null)}>
               Close
             </Button>
           </DialogFooter>

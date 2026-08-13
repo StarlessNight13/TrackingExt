@@ -9,7 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@trackingext/ui/components/dropdown-menu";
 import { Skeleton } from "@trackingext/ui/components/skeleton";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { LogOutIcon } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { authClient } from "@/lib/auth-client";
 
@@ -49,11 +50,16 @@ export default function UserMenu({ compact = false }: { compact?: boolean }) {
           label
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="bg-card">
+      <DropdownMenuContent align="end" sideOffset={6}>
         <DropdownMenuGroup>
-          <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuLabel>My account</DropdownMenuLabel>
+          <DropdownMenuItem disabled className="h-auto min-h-12 flex-col items-start gap-0.5 py-2">
+            <span className="truncate font-medium">{label}</span>
+            <span className="truncate text-xs font-normal text-muted-foreground">
+              {session.user.email}
+            </span>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>{session.user.email}</DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
             onClick={() => {
@@ -66,6 +72,7 @@ export default function UserMenu({ compact = false }: { compact?: boolean }) {
               });
             }}
           >
+            <LogOutIcon />
             Sign out
           </DropdownMenuItem>
         </DropdownMenuGroup>

@@ -59,9 +59,9 @@ export function SyncSettingsPanel() {
         </AlertDescription>
       </Alert>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-3">
         {SYNC_MODES.map((mode) => (
-          <Card key={mode.id} className="border-border/70 bg-card/70">
+          <Card key={mode.id} variant="outlined">
             <CardHeader className="gap-3">
               <div className="flex items-center gap-2">
                 <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">

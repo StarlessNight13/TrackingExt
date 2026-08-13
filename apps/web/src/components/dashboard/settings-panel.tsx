@@ -84,7 +84,7 @@ export function SettingsPanel() {
         </AlertDescription>
       </Alert>
 
-      <Card>
+      <Card variant="filled">
         <CardHeader>
           <CardTitle>Dashboard theme</CardTitle>
           <CardDescription>
@@ -157,7 +157,7 @@ export function SettingsPanel() {
         </CardFooter>
       </Card>
 
-      <Card>
+      <Card variant="filled">
         <CardHeader>
           <CardTitle>Sync preferences</CardTitle>
           <CardDescription>Control what gets stored for tracked activities.</CardDescription>
@@ -210,7 +210,7 @@ export function SettingsPanel() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card variant="filled">
         <CardHeader>
           <CardTitle>History retention</CardTitle>
           <CardDescription>
@@ -241,7 +241,7 @@ export function SettingsPanel() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card variant="filled">
         <CardHeader>
           <CardTitle>Excluded websites</CardTitle>
           <CardDescription>

@@ -104,7 +104,7 @@ export function DevicesPanel() {
 
   return (
     <>
-      <div className="flex flex-col gap-3">
+      <div className="card-stack">
         {devices.map((device) => {
           const offline = Date.now() - new Date(device.lastSeenAt).getTime() > OFFLINE_DEVICE_MS;
           return (
@@ -177,7 +177,7 @@ export function DevicesPanel() {
               Use a label you’ll recognize, like “Work PC · Firefox”.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="device-name">Name</Label>
             <Input
               id="device-name"
@@ -187,7 +187,7 @@ export function DevicesPanel() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingId(null)}>
+            <Button variant="ghost" className="text-primary" onClick={() => setEditingId(null)}>
               Cancel
             </Button>
             <Button
