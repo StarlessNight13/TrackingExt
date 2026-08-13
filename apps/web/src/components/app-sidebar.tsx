@@ -14,7 +14,6 @@ import {
 } from "@trackingext/ui/components/sidebar";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard } from "lucide-react";
 import type { ComponentProps } from "react";
 
 import { NavUser } from "@/components/nav-user";
@@ -37,8 +36,8 @@ export function AppSidebar({ variant = "inset", ...props }: AppSidebarProps) {
     <Sidebar collapsible="icon" variant={variant} {...props}>
       <SidebarHeader>
         <div className="flex items-center gap-3 px-2 py-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground">
-            <LayoutDashboard className="size-4" />
+          <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sidebar-primary">
+            <img src="/trackingext-icon.png" width={32} height={32} alt="" />
           </span>
           <div className="flex min-w-0 flex-col leading-none group-data-[collapsible=icon]:hidden">
             <span className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/70">

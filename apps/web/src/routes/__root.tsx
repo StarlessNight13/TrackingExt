@@ -29,7 +29,8 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
     links: [
       {
         rel: "icon",
-        href: "/favicon.ico",
+        href: "/trackingext-icon.png",
+        type: "image/png",
       },
     ],
   }),

@@ -116,7 +116,10 @@ export default function App() {
           <>
             <header className="dashboard-page__header">
               <div className="brand">
-                <h1>TrackingExt</h1>
+                <div className="row" style={{ gap: 8 }}>
+                  <img src="/icon/128.png" width={28} height={28} alt="" />
+                  <h1>TrackingExt</h1>
+                </div>
                 <span className="meta">Local dashboard</span>
               </div>
               <div className="row wrap dashboard-page__meta">

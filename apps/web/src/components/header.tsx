@@ -20,8 +20,8 @@ export default function Header() {
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4">
         <div className="flex items-center gap-6">
           <Link to={homeHref} className="flex items-center gap-3 text-sm font-semibold tracking-tight">
-            <span className="flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25">
-              T
+            <span className="flex size-10 items-center justify-center overflow-hidden rounded-2xl bg-primary shadow-lg shadow-primary/25">
+              <img src="/trackingext-icon.png" width={40} height={40} alt="" />
             </span>
             <span className="flex flex-col leading-none">
               <span className="text-[0.72rem] uppercase tracking-[0.18em] text-muted-foreground">

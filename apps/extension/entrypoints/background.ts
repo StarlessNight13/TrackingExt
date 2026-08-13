@@ -477,7 +477,7 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 }
 
 const TRACK_CONTEXT_MENU_ID = "trackingext-track-page";
-const NOTIFICATION_ICON = browser.runtime.getURL("/wxt.svg");
+const NOTIFICATION_ICON = browser.runtime.getURL("/icon/128.png");
 
 async function showNotification(title: string, message: string) {
   try {
