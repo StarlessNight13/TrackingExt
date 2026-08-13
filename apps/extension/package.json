@@ -9,8 +9,10 @@
     "dev:firefox": "wxt -b firefox --host 0.0.0.0 --port 5555",
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",
+    "build:firefox-android": "wxt build -b firefox-android --mv2",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
+    "zip:firefox-android": "wxt zip -b firefox-android --mv2",
     "compile": "tsc --noEmit",
     "check-types": "tsc --noEmit",
     "postinstall": "wxt prepare"

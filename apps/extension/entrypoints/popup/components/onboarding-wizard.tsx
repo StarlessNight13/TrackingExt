@@ -11,6 +11,7 @@ import {
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import { DEFAULT_SERVER_URL, normalizeServerUrl } from "@/lib/server-url";
 import type { SyncModes } from "@/lib/types";
+import { supportedSyncModes, supportsLanSync } from "@/lib/browser-capabilities";
 
 import { AuthPanel } from "./auth-panel";
 import { LanPairingPanel } from "./lan-pairing-panel";
@@ -46,7 +47,7 @@ export function OnboardingWizard({
   onDone: (snapshot: PopupSnapshot) => void;
 }) {
   const [syncModes, setSyncModes] = useState<SyncModes>(
-    snapshot?.syncModes ?? { offline: true, lan: false, server: false },
+    supportedSyncModes(snapshot?.syncModes ?? { offline: true, lan: false, server: false }),
   );
   const [stepIndex, setStepIndex] = useState(() => resolveInitialStepIndex(snapshot, syncModes));
   const [liveSnapshot, setLiveSnapshot] = useState(snapshot);
@@ -186,13 +187,15 @@ export function OnboardingWizard({
             onChange={() => toggleMode("offline")}
             id="mode-offline"
           />
-          <M3SwitchRow
-            title="Same-network (LAN)"
-            description="Sync with nearby extensions via WebRTC"
-            checked={syncModes.lan}
-            onChange={() => toggleMode("lan")}
-            id="mode-lan"
-          />
+          {supportsLanSync ? (
+            <M3SwitchRow
+              title="Same-network (LAN)"
+              description="Sync with nearby extensions via WebRTC"
+              checked={syncModes.lan}
+              onChange={() => toggleMode("lan")}
+              id="mode-lan"
+            />
+          ) : null}
           <M3SwitchRow
             title="Server"
             description="Cloud sync, dashboard, and sign-in"

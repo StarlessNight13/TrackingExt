@@ -19,6 +19,7 @@ import { clearOfflineHistory, getOfflineHistory } from "../lib/sync/offline-stor
 import { isServerSyncActive, isValidSyncModes, resolveLanSignalingMode } from "../lib/sync-modes";
 import { clearAuthState, getLocalState, setLocalState } from "../lib/storage";
 import { normalizeServerUrl } from "../lib/server-url";
+import { supportedSyncModes, supportsLanSync } from "../lib/browser-capabilities";
 import { stripTrackedTabBadge } from "../lib/title-badge";
 import {
   canUseTrackingFeatures,
@@ -46,6 +47,16 @@ async function runFullSync() {
   if (isServerSyncActive(state.syncModes, state.serverUrl, state.sessionToken)) {
     await syncSettings();
     await refreshCachedTabs();
+  }
+}
+
+async function disableUnsupportedLanSync() {
+  if (supportsLanSync) return;
+
+  const state = await getLocalState();
+  const syncModes = supportedSyncModes(state.syncModes);
+  if (syncModes.lan !== state.syncModes.lan || syncModes.offline !== state.syncModes.offline) {
+    await setLocalState({ syncModes });
   }
 }
 
@@ -235,13 +246,14 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
       }
 
       case "UPDATE_SYNC_MODES": {
-        if (!isValidSyncModes(message.syncModes)) {
+        const syncModes = supportedSyncModes(message.syncModes);
+        if (!isValidSyncModes(syncModes)) {
           throw new Error("Select at least one sync mode");
         }
         const current = await getLocalState();
         await setLocalState({
-          syncModes: message.syncModes,
-          lanSignalingMode: resolveLanSignalingMode(message.syncModes, current.lanSignalingMode),
+          syncModes,
+          lanSignalingMode: resolveLanSignalingMode(syncModes, current.lanSignalingMode),
         });
         await syncLanManagerViaOffscreen();
         const next = await getLocalState();
@@ -515,6 +527,7 @@ async function trackFromContextMenu(tabId: number | undefined) {
 }
 
 async function startLanSyncIfEnabled() {
+  if (!supportsLanSync) return;
   try {
     const state = await getLocalState();
     if (!state.syncModes.lan || !state.onboardingComplete) return;
@@ -553,18 +566,23 @@ export default defineBackground(() => {
     return true;
   });
 
-  void ensureContextMenus();
+  void disableUnsupportedLanSync();
+  if (!import.meta.env.BROWSER || import.meta.env.BROWSER !== "firefox-android") {
+    void ensureContextMenus();
+  }
   void startLanSyncIfEnabled();
 
-  browser.commands.onCommand.addListener((command) => {
-    if (command !== RESUME_COMMAND) return;
-    void openResumePicker();
-  });
+  if (import.meta.env.BROWSER !== "firefox-android") {
+    browser.commands.onCommand.addListener((command) => {
+      if (command !== RESUME_COMMAND) return;
+      void openResumePicker();
+    });
 
-  browser.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId !== TRACK_CONTEXT_MENU_ID) return;
-    void trackFromContextMenu(tab?.id);
-  });
+    browser.contextMenus.onClicked.addListener((info, tab) => {
+      if (info.menuItemId !== TRACK_CONTEXT_MENU_ID) return;
+      void trackFromContextMenu(tab?.id);
+    });
+  }
 
 
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -579,19 +597,27 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onInstalled.addListener(() => {
-    void ensureContextMenus();
+    void disableUnsupportedLanSync();
+    if (import.meta.env.BROWSER !== "firefox-android") {
+      void ensureContextMenus();
+    }
     void reconcileRestoredTabs();
     void startLanSyncIfEnabled();
   });
 
   browser.runtime.onStartup.addListener(() => {
-    void ensureContextMenus();
+    void disableUnsupportedLanSync();
+    if (import.meta.env.BROWSER !== "firefox-android") {
+      void ensureContextMenus();
+    }
     void reconcileRestoredTabs();
     void startLanSyncIfEnabled();
   });
 
   browser.alarms.create("trackingext-sync", { periodInMinutes: 5 });
-  browser.alarms.create("trackingext-lan", { periodInMinutes: 1 });
+  if (supportsLanSync) {
+    browser.alarms.create("trackingext-lan", { periodInMinutes: 1 });
+  }
   browser.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === "trackingext-lan") {
       void startLanSyncIfEnabled();

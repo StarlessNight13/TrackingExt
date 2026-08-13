@@ -9,6 +9,7 @@ import { openDashboard, openWebDashboard, usesWebDashboard } from "@/lib/open-da
 import { describeSyncModes, needsServerUrl as needsServerUrlForModes } from "@/lib/sync-modes";
 import type { LanSignalingMode, PrivacySettings, SyncModes, TrackedTab } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
+import { supportedSyncModes, supportsLanSync } from "@/lib/browser-capabilities";
 import { formatDevice, relativeTime } from "@/lib/view-utils";
 
 
@@ -32,7 +33,7 @@ function SettingsView({
 }) {
   const [deviceName, setDeviceName] = useState(snapshot.deviceName ?? "");
   const [serverUrl, setServerUrl] = useState(snapshot.serverUrl ?? DEFAULT_SERVER_URL);
-  const [syncModes, setSyncModes] = useState<SyncModes>(snapshot.syncModes);
+  const [syncModes, setSyncModes] = useState<SyncModes>(() => supportedSyncModes(snapshot.syncModes));
   const [lanSignalingMode, setLanSignalingMode] = useState<LanSignalingMode>(snapshot.lanSignalingMode);
   const [showPairing, setShowPairing] = useState(false);
   const [excluded, setExcluded] = useState(snapshot.settings.excludedHosts.join("\n"));
@@ -41,7 +42,7 @@ function SettingsView({
 
   useEffect(() => {
     setServerUrl(snapshot.serverUrl ?? DEFAULT_SERVER_URL);
-    setSyncModes(snapshot.syncModes);
+    setSyncModes(supportedSyncModes(snapshot.syncModes));
   }, [snapshot.serverUrl, snapshot.syncModes]);
 
   const patchSettings = (settings: Partial<PrivacySettings>) => {
@@ -165,13 +166,15 @@ function SettingsView({
           onChange={() => toggleSyncMode("offline")}
           id="settings-mode-offline"
         />
-        <M3SwitchRow
-          title="LAN"
-          description="Same-network WebRTC sync"
-          checked={syncModes.lan}
-          onChange={() => toggleSyncMode("lan")}
-          id="settings-mode-lan"
-        />
+        {supportsLanSync ? (
+          <M3SwitchRow
+            title="LAN"
+            description="Same-network WebRTC sync"
+            checked={syncModes.lan}
+            onChange={() => toggleSyncMode("lan")}
+            id="settings-mode-lan"
+          />
+        ) : null}
         <M3SwitchRow
           title="Server"
           description="Cloud sync and web dashboard"
@@ -201,7 +204,7 @@ function SettingsView({
         </button>
       </div>
 
-      {snapshot.syncModes.lan || syncModes.lan ? (
+      {supportsLanSync && (snapshot.syncModes.lan || syncModes.lan) ? (
         <div className="panel stack">
           <span className="section-title" style={{ margin: 0 }}>
             LAN devices
