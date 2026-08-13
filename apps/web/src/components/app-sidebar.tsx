@@ -15,18 +15,26 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { LayoutDashboard } from "lucide-react";
+import type { ComponentProps } from "react";
 
 import { NavUser } from "@/components/nav-user";
-import { DASHBOARD_NAV } from "@/lib/dashboard-nav";
+import { DASHBOARD_NAV, DASHBOARD_SETTINGS_NAV } from "@/lib/dashboard-nav";
 import { orpc } from "@/utils/orpc";
 
-export function AppSidebar() {
+type AppSidebarProps = ComponentProps<typeof Sidebar>;
+
+function isNavActive(pathname: string, to: string, exact?: boolean) {
+  return exact ? pathname === to : pathname === to || pathname.startsWith(`${to}/`);
+}
+
+export function AppSidebar({ variant = "inset", ...props }: AppSidebarProps) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const tabsQuery = useQuery(orpc.trackedTabs.list.queryOptions());
   const tabCount = tabsQuery.data?.length ?? 0;
+  const SettingsIcon = DASHBOARD_SETTINGS_NAV.icon;
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" variant={variant} {...props}>
       <SidebarHeader>
         <div className="flex items-center gap-3 px-2 py-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground">
@@ -47,7 +55,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {DASHBOARD_NAV.map(({ to, label, icon: Icon, exact }) => {
-                const isActive = exact ? pathname === to : pathname === to || pathname.startsWith(`${to}/`);
+                const isActive = isNavActive(pathname, to, exact);
 
                 return (
                   <SidebarMenuItem key={to}>
@@ -71,6 +79,18 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={isNavActive(pathname, DASHBOARD_SETTINGS_NAV.to)}
+              render={<Link to={DASHBOARD_SETTINGS_NAV.to} />}
+              tooltip={DASHBOARD_SETTINGS_NAV.label}
+            >
+              <SettingsIcon />
+              <span>{DASHBOARD_SETTINGS_NAV.label}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <NavUser />
       </SidebarFooter>
       <SidebarRail />

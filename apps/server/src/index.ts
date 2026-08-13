@@ -20,7 +20,10 @@ app.use(logger());
 app.use(
   "/*",
   cors({
-    origin: (origin) => resolveCorsOrigin(origin, env.CORS_ORIGIN),
+    origin: (origin) =>
+      resolveCorsOrigin(origin, env.CORS_ORIGIN, {
+        allowPrivateNetworkOrigins: env.NODE_ENV === "development",
+      }),
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["set-auth-token"],

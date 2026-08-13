@@ -42,7 +42,7 @@ const VARIANT_LABELS: Record<(typeof DASHBOARD_THEME_VARIANTS)[number], string> 
   FRUIT_SALAD: "Fruit salad",
 };
 
-export function PrivacySettingsPanel() {
+export function SettingsPanel() {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery(orpc.settings.get.queryOptions());
   const [excludedText, setExcludedText] = useState("");
@@ -62,7 +62,7 @@ export function PrivacySettingsPanel() {
     ...orpc.settings.update.mutationOptions(),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: orpc.settings.get.queryKey() });
-      toast.success("Privacy settings saved");
+      toast.success("Settings saved");
     },
     onError: (error) => toast.error(error.message),
   });

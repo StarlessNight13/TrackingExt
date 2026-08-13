@@ -4,7 +4,7 @@ import {
   MonitorSmartphone,
   Puzzle,
   Radio,
-  Shield,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 
@@ -12,7 +12,7 @@ export type DashboardNavItem = {
   to:
     | "/dashboard"
     | "/dashboard/devices"
-    | "/dashboard/privacy"
+    | "/dashboard/settings"
     | "/dashboard/sessions"
     | "/dashboard/extension"
     | "/dashboard/sync";
@@ -25,14 +25,20 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
   { to: "/dashboard", label: "Tracked", icon: Bookmark, exact: true },
   { to: "/dashboard/sync", label: "Sync", icon: Radio },
   { to: "/dashboard/devices", label: "Devices", icon: MonitorSmartphone },
-  { to: "/dashboard/privacy", label: "Privacy", icon: Shield },
   { to: "/dashboard/sessions", label: "Sessions", icon: KeyRound },
   { to: "/dashboard/extension", label: "Extension", icon: Puzzle },
 ];
 
+export const DASHBOARD_SETTINGS_NAV: DashboardNavItem = {
+  to: "/dashboard/settings",
+  label: "Settings",
+  icon: Settings,
+};
+
 export function getDashboardNavItem(pathname: string) {
+  const items = [...DASHBOARD_NAV, DASHBOARD_SETTINGS_NAV];
   return (
-    DASHBOARD_NAV.find((item) =>
+    items.find((item) =>
       item.exact ? pathname === item.to : pathname === item.to || pathname.startsWith(`${item.to}/`),
     ) ?? DASHBOARD_NAV[0]
   );

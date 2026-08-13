@@ -23,7 +23,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       {
         name: "description",
         content:
-          "Manage synced tracked tabs, extension devices, privacy settings, and account sessions.",
+          "Manage synced tracked tabs, extension devices, account settings, and sessions.",
       },
     ],
     links: [

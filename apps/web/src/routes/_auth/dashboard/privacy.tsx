@@ -1,11 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-
-import { PrivacySettingsPanel } from "@/components/dashboard/privacy-settings-panel";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_auth/dashboard/privacy")({
-  component: PrivacyPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/dashboard/settings" });
+  },
 });
-
-function PrivacyPage() {
-  return <PrivacySettingsPanel />;
-}

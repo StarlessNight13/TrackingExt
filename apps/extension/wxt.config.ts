@@ -8,6 +8,11 @@ export default defineConfig({
       chrome: "/usr/bin/helium",
     },
   },
+  zip: {
+    // Self-hosted dashboard downloads; AMO source zip not required
+    zipSources: false,
+    artifactTemplate: "{{name}}-{{browser}}.zip",
+  },
   suppressWarnings: {
     firefoxDataCollection: true,
   },

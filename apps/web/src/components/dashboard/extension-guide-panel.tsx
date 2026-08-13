@@ -6,10 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@trac
 import { cn } from "@trackingext/ui/lib/utils";
 import { Check, Download, ExternalLink, Globe, Puzzle, ShieldCheck, ShoppingBag } from "lucide-react";
 
+import { ExtensionInstallStatusCard } from "@/components/dashboard/extension-install-status";
+
 const STEPS = [
   {
-    title: "Build or load the extension",
-    body: "From the repo run bun run dev:extension (Chromium) or bun run dev:extension:firefox, then load the unpacked build from apps/extension/.output.",
+    title: "Install the extension",
+    body: "Download the Chromium or Firefox package from the cards below (served from this dashboard), or for local development run bun run dev:extension / bun run dev:extension:firefox and load the unpacked build from apps/extension/.output.",
   },
   {
     title: "Choose sync modes",
@@ -162,6 +164,8 @@ export function ExtensionGuidePanel() {
           updates to your account.
         </AlertDescription>
       </Alert>
+
+      <ExtensionInstallStatusCard />
 
       <div className="grid gap-3 md:grid-cols-2">
         <BrowserCard

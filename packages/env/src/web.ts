@@ -4,7 +4,9 @@ import { z } from "zod";
 export const env = createEnv({
   clientPrefix: "VITE_",
   client: {
-    VITE_SERVER_URL: z.url(),
+    // Empty / unset = use the page origin (needed when opening via host IP from another device).
+    // Set an absolute URL only when the API is on a different public origin.
+    VITE_SERVER_URL: z.url().optional(),
     VITE_CHROME_WEB_STORE_URL: z.url().optional(),
     VITE_FIREFOX_ADDON_URL: z.url().optional(),
     VITE_CHROMIUM_DOWNLOAD_URL: z.string().default("/downloads/trackingext-chromium.zip"),

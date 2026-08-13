@@ -1,4 +1,8 @@
 import { addTrackedTabBadge, stripTrackedTabBadge } from "../lib/title-badge";
+import {
+  DASHBOARD_BRIDGE_SOURCE,
+  getExtensionBridgeInfo,
+} from "../lib/extension-bridge";
 
 type TitleBadgeMessage =
   | { type: "SET_TRACKED_TITLE_BADGE"; emoji?: string | null }
@@ -28,6 +32,10 @@ function clearTrackedTitle() {
   withOwnTitleChange(stripTrackedTabBadge(document.title, previousEmoji));
 }
 
+function announceToPage() {
+  window.postMessage(getExtensionBridgeInfo(), window.location.origin);
+}
+
 const observer = new MutationObserver(() => {
   if (applyingOwnTitleChange || !trackedEmoji) return;
   syncTrackedTitle();
@@ -52,6 +60,14 @@ export default defineContentScript({
 
       if (message.type === "CLEAR_TRACKED_TITLE_BADGE") {
         clearTrackedTitle();
+      }
+    });
+
+    window.addEventListener("message", (event) => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      const data = event.data as { source?: string; type?: string } | null;
+      if (data?.source === DASHBOARD_BRIDGE_SOURCE && data.type === "EXTENSION_PING") {
+        announceToPage();
       }
     });
 
