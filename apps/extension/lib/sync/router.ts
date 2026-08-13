@@ -13,6 +13,7 @@ import {
 } from "./offline-store";
 import { broadcastLanTabEvent } from "../lan-sync/broadcast";
 import { isLocalTrackedTabId, promoteLocalTabsToServer } from "./server-bridge";
+import { queueLocationUpdate } from "./location-queue";
 
 export async function syncDeleteTabFromPeer(tabId: string) {
   const state = await getLocalState();
@@ -130,7 +131,11 @@ export async function syncUpdateTabLocation(input: {
         });
       }
     } catch {
-      // ownership conflict — keep local result
+      await queueLocationUpdate({
+        tabId: input.tabId,
+        url: input.url,
+        title: input.title ?? null,
+      });
     }
   }
 
@@ -220,5 +225,7 @@ export async function applyPeerTabUpdate(tab: TrackedTab) {
 
 function mergeTabList(state: { cachedTabs: TrackedTab[] }, tab: TrackedTab) {
   const exists = state.cachedTabs.some((t) => t.id === tab.id);
-  return exists ? state.cachedTabs.map((t) => (t.id === tab.id ? tab : t)) : [tab, ...state.cachedTabs];
+  return exists
+    ? state.cachedTabs.map((t) => (t.id === tab.id ? tab : t))
+    : [tab, ...state.cachedTabs];
 }

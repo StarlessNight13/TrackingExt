@@ -31,6 +31,8 @@ export const trackedTab = sqliteTable(
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     emoji: text("emoji"),
+    /** JSON array of user-defined labels, e.g. ["research","work"] */
+    tags: text("tags").default("[]").notNull(),
     currentUrl: text("current_url").notNull(),
     currentTitle: text("current_title"),
     activeDeviceId: text("active_device_id").references(() => device.id, {
@@ -45,10 +47,12 @@ export const trackedTab = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
+    archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
   },
   (table) => [
     index("tracked_tab_userId_idx").on(table.userId),
     index("tracked_tab_activeDeviceId_idx").on(table.activeDeviceId),
+    index("tracked_tab_archivedAt_idx").on(table.archivedAt),
   ],
 );
 

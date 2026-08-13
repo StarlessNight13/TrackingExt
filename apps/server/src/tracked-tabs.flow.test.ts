@@ -23,7 +23,11 @@ async function signUp() {
   return token;
 }
 
-async function rpc<T>(token: string, path: string, body: unknown): Promise<{ status: number; json: T }> {
+async function rpc<T>(
+  token: string,
+  path: string,
+  body: unknown,
+): Promise<{ status: number; json: T }> {
   const res = await app.request(`/rpc/${path}`, {
     method: "POST",
     headers: {
@@ -114,10 +118,14 @@ describe("tracked tabs API flow", () => {
     expect(conflict.status).toBe(409);
     expect(conflict.json.json.code).toBe("CONFLICT");
 
-    const takeOver = await rpc<{ json: { activeDeviceId: string } }>(token, "trackedTabs/takeOver", {
-      id: tabId,
-      deviceId: laptopId,
-    });
+    const takeOver = await rpc<{ json: { activeDeviceId: string } }>(
+      token,
+      "trackedTabs/takeOver",
+      {
+        id: tabId,
+        deviceId: laptopId,
+      },
+    );
     expect(takeOver.status).toBe(200);
     expect(takeOver.json.json.activeDeviceId).toBe(laptopId);
 
@@ -133,5 +141,40 @@ describe("tracked tabs API flow", () => {
     );
     expect(update.status).toBe(200);
     expect(update.json.json.tab.currentUrl).toBe("https://example.com/docs/2");
+  });
+
+  it("stores tags and moves archived activities out of the active list", async () => {
+    const token = await signUp();
+    const device = await rpc<{ json: { id: string } }>(token, "devices/register", {
+      name: "Home PC · Firefox",
+      browser: "Firefox",
+    });
+
+    const created = await rpc<{ json: { id: string; tags: string[] } }>(
+      token,
+      "trackedTabs/create",
+      {
+        deviceId: device.json.json.id,
+        name: "Release notes",
+        tags: ["Work", "research", "work"],
+        url: "https://example.com/releases",
+      },
+    );
+    expect(created.json.json.tags).toEqual(["work", "research"]);
+
+    const archived = await rpc<{ json: { archivedAt: string | null } }>(
+      token,
+      "trackedTabs/archive",
+      { id: created.json.json.id },
+    );
+    expect(archived.json.json.archivedAt).not.toBeNull();
+
+    const active = await rpc<{ json: Array<{ id: string }> }>(token, "trackedTabs/list", {});
+    expect(active.json.json.some((tab) => tab.id === created.json.json.id)).toBe(false);
+
+    const archivedList = await rpc<{ json: Array<{ id: string }> }>(token, "trackedTabs/list", {
+      archived: "archived",
+    });
+    expect(archivedList.json.json.map((tab) => tab.id)).toContain(created.json.json.id);
   });
 });

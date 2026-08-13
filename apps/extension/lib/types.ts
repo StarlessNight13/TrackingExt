@@ -44,14 +44,23 @@ export type TrackedTab = {
   id: string;
   name: string;
   emoji: string | null;
+  tags: string[];
   currentUrl: string;
   currentTitle: string | null;
   activeDeviceId: string | null;
   lastUpdatedDeviceId: string | null;
   lastUpdatedAt: string;
   createdAt: string;
+  archivedAt: string | null;
   activeDevice: { id: string; name: string; browser: string } | null;
   lastUpdatedDevice: { id: string; name: string; browser: string } | null;
+};
+
+export type QueuedLocationUpdate = {
+  tabId: string;
+  url: string;
+  title: string | null;
+  queuedAt: string;
 };
 
 export type HistoryEntry = {
@@ -86,6 +95,8 @@ export type LocalState = {
   cachedTabs: TrackedTab[];
   settings: PrivacySettings;
   pendingReconnect: ReconnectCandidate[];
+  /** Latest unsent location update per server-backed tracked tab. */
+  queuedLocationUpdates: Record<string, QueuedLocationUpdate>;
 };
 
 export const DEFAULT_SETTINGS: PrivacySettings = {
@@ -112,4 +123,5 @@ export const DEFAULT_LOCAL_STATE: LocalState = {
   cachedTabs: [],
   settings: DEFAULT_SETTINGS,
   pendingReconnect: [],
+  queuedLocationUpdates: {},
 };

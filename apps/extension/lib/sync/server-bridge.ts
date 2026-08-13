@@ -2,8 +2,12 @@ import type { TrackedTab } from "../types";
 import { getApiClient } from "../api";
 import { isServerSyncActive } from "../sync-modes";
 import { getLocalState, setLocalState } from "../storage";
+import { flushQueuedLocationUpdates } from "./location-queue";
 
-export function mergeTabsByRecency(serverTabs: TrackedTab[], localTabs: TrackedTab[]): TrackedTab[] {
+export function mergeTabsByRecency(
+  serverTabs: TrackedTab[],
+  localTabs: TrackedTab[],
+): TrackedTab[] {
   const byId = new Map<string, TrackedTab>();
 
   for (const tab of serverTabs) {
@@ -34,7 +38,10 @@ export async function promoteLocalTabsToServer(): Promise<Map<string, string>> {
   const idMap = new Map<string, string>();
   const state = await getLocalState();
 
-  if (!isServerSyncActive(state.syncModes, state.serverUrl, state.sessionToken) || !state.deviceId) {
+  if (
+    !isServerSyncActive(state.syncModes, state.serverUrl, state.sessionToken) ||
+    !state.deviceId
+  ) {
     return idMap;
   }
 
@@ -106,11 +113,13 @@ export async function pullServerTabsMergedWithLocal(): Promise<TrackedTab[]> {
 
   await promoteLocalTabsToServer();
 
+  const replayedTabs = await flushQueuedLocationUpdates();
+
   const api = await getApiClient();
   const serverTabs = await api.trackedTabs.list();
   const refreshed = await getLocalState();
   const remainingLocal = refreshed.cachedTabs.filter((tab) => isLocalTrackedTabId(tab.id));
-  const merged = mergeTabsByRecency(serverTabs, remainingLocal);
+  const merged = mergeTabsByRecency([...replayedTabs, ...serverTabs], remainingLocal);
   await setLocalState({ cachedTabs: merged });
   return merged;
 }

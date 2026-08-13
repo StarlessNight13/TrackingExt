@@ -28,8 +28,18 @@ import { Input } from "@trackingext/ui/components/input";
 import { Label } from "@trackingext/ui/components/label";
 import { Skeleton } from "@trackingext/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bookmark, BookmarkX, ExternalLink, History, Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+import {
+  Archive,
+  ArchiveRestore,
+  Bookmark,
+  BookmarkX,
+  ExternalLink,
+  History,
+  Pencil,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { useDeferredValue, useState } from "react";
 import { toast } from "sonner";
 
 import { displayHostPath, relativeTime } from "@/lib/format";
@@ -44,15 +54,19 @@ type HistoryEntry = {
 
 export function TrackedTabsPanel() {
   const queryClient = useQueryClient();
-  const tabsQuery = useQuery(orpc.trackedTabs.list.queryOptions());
+  const [view, setView] = useState<"active" | "archived">("active");
+  const tabsQuery = useQuery(orpc.trackedTabs.list.queryOptions({ input: { archived: view } }));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [editTags, setEditTags] = useState("");
   const [historyTabId, setHistoryTabId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase());
 
   const renameMutation = useMutation({
     ...orpc.trackedTabs.rename.mutationOptions(),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: orpc.trackedTabs.list.queryKey() });
+      await queryClient.invalidateQueries();
       setEditingId(null);
       toast.success("Tracked tab renamed");
     },
@@ -62,8 +76,26 @@ export function TrackedTabsPanel() {
   const deleteMutation = useMutation({
     ...orpc.trackedTabs.delete.mutationOptions(),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: orpc.trackedTabs.list.queryKey() });
+      await queryClient.invalidateQueries();
       toast.success("Tracking stopped");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const archiveMutation = useMutation({
+    ...orpc.trackedTabs.archive.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      toast.success("Activity archived");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const restoreMutation = useMutation({
+    ...orpc.trackedTabs.restore.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      toast.success("Activity restored");
     },
     onError: (error) => toast.error(error.message),
   });
@@ -111,43 +143,93 @@ export function TrackedTabsPanel() {
     );
   }
 
-  const tabs = tabsQuery.data ?? [];
-
-  if (tabs.length === 0) {
-    return (
-      <div className="dashboard-empty-state">
-        <Empty className="max-w-lg border border-dashed">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <BookmarkX />
-            </EmptyMedia>
-            <EmptyTitle>No tracked activities yet</EmptyTitle>
-            <EmptyDescription>
-              Open the browser extension, visit a page, and choose Track this tab. Synced activities
-              will show up here across every device on your account.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </div>
-    );
-  }
+  const tabs = (tabsQuery.data ?? []).filter((tab) => {
+    if (!deferredSearch) return true;
+    const searchable = [tab.name, tab.currentTitle ?? "", tab.currentUrl, ...tab.tags]
+      .join(" ")
+      .toLocaleLowerCase();
+    return searchable.includes(deferredSearch);
+  });
 
   return (
     <>
+      <Card>
+        <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row">
+          <div className="flex flex-1 items-center gap-2">
+            <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search activities, sites, or tags"
+              aria-label="Search tracked activities"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant={view === "active" ? "default" : "outline"}
+              onClick={() => setView("active")}
+            >
+              Active
+            </Button>
+            <Button
+              variant={view === "archived" ? "default" : "outline"}
+              onClick={() => setView("archived")}
+            >
+              Archived
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      {tabs.length === 0 ? (
+        <Empty className="border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">{search ? <Search /> : <BookmarkX />}</EmptyMedia>
+            <EmptyTitle>
+              {search
+                ? "No matching activities"
+                : view === "archived"
+                  ? "No archived activities"
+                  : "No tracked activities yet"}
+            </EmptyTitle>
+            <EmptyDescription>
+              {search
+                ? "Try a different search or switch activity views."
+                : view === "archived"
+                  ? "Archived activities remain here until you are ready to restore them."
+                  : "Open the browser extension, visit a page, and choose Track this tab."}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : null}
       <div className="flex flex-col gap-3">
         {tabs.map((tab) => (
           <Card key={tab.id}>
             <CardHeader className="gap-2">
               <div className="col-start-1 flex min-w-0 items-start gap-3">
                 <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
-                  {tab.emoji ? <span className="text-lg">{tab.emoji}</span> : <Bookmark className="size-5" />}
+                  {tab.emoji ? (
+                    <span className="text-lg">{tab.emoji}</span>
+                  ) : (
+                    <Bookmark className="size-5" />
+                  )}
                 </div>
                 <div className="flex min-w-0 flex-col gap-1">
-                  <CardDescription className="uppercase tracking-[0.14em]">Tracked activity</CardDescription>
+                  <CardDescription className="uppercase tracking-[0.14em]">
+                    Tracked activity
+                  </CardDescription>
                   <CardTitle className="truncate text-base">{tab.name}</CardTitle>
                   <CardDescription className="truncate">
                     {tab.currentTitle || displayHostPath(tab.currentUrl)}
                   </CardDescription>
+                  {tab.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {tab.tags.map((tag) => (
+                        <Badge key={tag} variant="outline">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <CardAction>
@@ -188,6 +270,7 @@ export function TrackedTabsPanel() {
                 onClick={() => {
                   setEditingId(tab.id);
                   setEditName(tab.name);
+                  setEditTags(tab.tags.join(", "));
                 }}
               >
                 <Pencil data-icon="inline-start" />
@@ -197,6 +280,25 @@ export function TrackedTabsPanel() {
                 <History data-icon="inline-start" />
                 History
               </Button>
+              {view === "active" ? (
+                <Button
+                  variant="outline"
+                  disabled={archiveMutation.isPending}
+                  onClick={() => archiveMutation.mutate({ id: tab.id })}
+                >
+                  <Archive data-icon="inline-start" />
+                  Archive
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  disabled={restoreMutation.isPending}
+                  onClick={() => restoreMutation.mutate({ id: tab.id })}
+                >
+                  <ArchiveRestore data-icon="inline-start" />
+                  Restore
+                </Button>
+              )}
               <Button
                 variant="destructive"
                 disabled={deleteMutation.isPending}
@@ -219,7 +321,7 @@ export function TrackedTabsPanel() {
           <DialogHeader>
             <DialogTitle>Rename tracked tab</DialogTitle>
             <DialogDescription>
-              Give this activity a name you’ll recognize across devices.
+              Give this activity a recognizable name and optional comma-separated tags.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
@@ -230,6 +332,13 @@ export function TrackedTabsPanel() {
               onChange={(e) => setEditName(e.target.value)}
               autoFocus
             />
+            <Label htmlFor="tracked-tags">Tags</Label>
+            <Input
+              id="tracked-tags"
+              value={editTags}
+              onChange={(e) => setEditTags(e.target.value)}
+              placeholder="research, work"
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingId(null)}>
@@ -239,7 +348,14 @@ export function TrackedTabsPanel() {
               disabled={!editName.trim() || renameMutation.isPending || !editingId}
               onClick={() => {
                 if (!editingId) return;
-                renameMutation.mutate({ id: editingId, name: editName.trim() });
+                renameMutation.mutate({
+                  id: editingId,
+                  name: editName.trim(),
+                  tags: editTags
+                    .split(",")
+                    .map((tag) => tag.trim())
+                    .filter(Boolean),
+                });
               }}
             >
               Save

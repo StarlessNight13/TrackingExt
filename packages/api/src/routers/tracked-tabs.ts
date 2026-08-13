@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, isNotNull } from "drizzle-orm";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
@@ -28,16 +28,36 @@ function serializeTab(
     id: row.id,
     name: row.name,
     emoji: row.emoji,
+    tags: parseTags(row.tags),
     currentUrl: row.currentUrl,
     currentTitle: row.currentTitle,
     activeDeviceId: row.activeDeviceId,
     lastUpdatedDeviceId: row.lastUpdatedDeviceId,
     lastUpdatedAt: row.lastUpdatedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
+    archivedAt: row.archivedAt?.toISOString() ?? null,
     activeDevice: serializeDevice(row.activeDevice),
     lastUpdatedDevice: serializeDevice(row.lastUpdatedDevice),
   };
 }
+
+function parseTags(raw: string) {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((tag): tag is string => typeof tag === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+const tagsSchema = z
+  .array(z.string().trim().min(1).max(40))
+  .max(20)
+  .transform((tags) => [...new Set(tags.map((tag) => tag.toLocaleLowerCase()))]);
+
+const tabIdsSchema = z.array(z.string().min(1)).min(1).max(100);
 
 async function requireOwnedTab(userId: string, tabId: string) {
   const tab = await db.query.trackedTab.findFirst({
@@ -64,17 +84,28 @@ async function requireOwnedDevice(userId: string, deviceId: string) {
 }
 
 export const trackedTabsRouter = {
-  list: protectedProcedure.handler(async ({ context }) => {
-    const rows = await db.query.trackedTab.findMany({
-      where: eq(trackedTab.userId, context.session.user.id),
-      with: {
-        activeDevice: true,
-        lastUpdatedDevice: true,
-      },
-      orderBy: [desc(trackedTab.lastUpdatedAt)],
-    });
-    return rows.map(serializeTab);
-  }),
+  list: protectedProcedure
+    .input(z.object({ archived: z.enum(["active", "archived", "all"]).optional() }).optional())
+    .handler(async ({ context, input }) => {
+      const archived = input?.archived ?? "active";
+      const archivedFilter =
+        archived === "active"
+          ? isNull(trackedTab.archivedAt)
+          : archived === "archived"
+            ? isNotNull(trackedTab.archivedAt)
+            : undefined;
+      const rows = await db.query.trackedTab.findMany({
+        where: archivedFilter
+          ? and(eq(trackedTab.userId, context.session.user.id), archivedFilter)
+          : eq(trackedTab.userId, context.session.user.id),
+        with: {
+          activeDevice: true,
+          lastUpdatedDevice: true,
+        },
+        orderBy: [desc(trackedTab.lastUpdatedAt)],
+      });
+      return rows.map(serializeTab);
+    }),
 
   get: protectedProcedure
     .input(z.object({ id: z.string().min(1) }))
@@ -89,6 +120,7 @@ export const trackedTabsRouter = {
         deviceId: z.string().min(1),
         name: z.string().min(1).max(120),
         emoji: z.string().max(8).optional(),
+        tags: tagsSchema.optional(),
         url: z.string().url(),
         title: z.string().max(500).nullable().optional(),
       }),
@@ -112,6 +144,7 @@ export const trackedTabsRouter = {
         userId,
         name: input.name,
         emoji: input.emoji ?? null,
+        tags: JSON.stringify(input.tags ?? []),
         currentUrl: input.url,
         currentTitle: input.title ?? null,
         activeDeviceId: input.deviceId,
@@ -141,6 +174,7 @@ export const trackedTabsRouter = {
         id: z.string().min(1),
         name: z.string().min(1).max(120),
         emoji: z.string().max(8).nullable().optional(),
+        tags: tagsSchema.optional(),
       }),
     )
     .handler(async ({ context, input }) => {
@@ -150,10 +184,67 @@ export const trackedTabsRouter = {
         .set({
           name: input.name,
           ...(input.emoji !== undefined ? { emoji: input.emoji } : {}),
+          ...(input.tags !== undefined ? { tags: JSON.stringify(input.tags) } : {}),
         })
         .where(eq(trackedTab.id, input.id));
       const tab = await requireOwnedTab(context.session.user.id, input.id);
       return serializeTab(tab);
+    }),
+
+  archive: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .handler(async ({ context, input }) => {
+      await requireOwnedTab(context.session.user.id, input.id);
+      await db
+        .update(trackedTab)
+        .set({ archivedAt: new Date(), activeDeviceId: null })
+        .where(eq(trackedTab.id, input.id));
+      return serializeTab(await requireOwnedTab(context.session.user.id, input.id));
+    }),
+
+  restore: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .handler(async ({ context, input }) => {
+      await requireOwnedTab(context.session.user.id, input.id);
+      await db.update(trackedTab).set({ archivedAt: null }).where(eq(trackedTab.id, input.id));
+      return serializeTab(await requireOwnedTab(context.session.user.id, input.id));
+    }),
+
+  bulkArchive: protectedProcedure
+    .input(z.object({ ids: tabIdsSchema }))
+    .handler(async ({ context, input }) => {
+      await db
+        .update(trackedTab)
+        .set({ archivedAt: new Date(), activeDeviceId: null })
+        .where(and(eq(trackedTab.userId, context.session.user.id), inArray(trackedTab.id, input.ids)));
+      return { ok: true as const };
+    }),
+
+  bulkDelete: protectedProcedure
+    .input(z.object({ ids: tabIdsSchema }))
+    .handler(async ({ context, input }) => {
+      await db
+        .delete(trackedTab)
+        .where(and(eq(trackedTab.userId, context.session.user.id), inArray(trackedTab.id, input.ids)));
+      return { ok: true as const };
+    }),
+
+  bulkTag: protectedProcedure
+    .input(z.object({ ids: tabIdsSchema, tags: tagsSchema, mode: z.enum(["add", "replace"]) }))
+    .handler(async ({ context, input }) => {
+      const rows = await db.query.trackedTab.findMany({
+        where: and(eq(trackedTab.userId, context.session.user.id), inArray(trackedTab.id, input.ids)),
+      });
+      await Promise.all(
+        rows.map((row) => {
+          const tags =
+            input.mode === "replace"
+              ? input.tags
+              : [...new Set([...parseTags(row.tags), ...input.tags])];
+          return db.update(trackedTab).set({ tags: JSON.stringify(tags) }).where(eq(trackedTab.id, row.id));
+        }),
+      );
+      return { ok: true as const };
     }),
 
   /**
@@ -173,6 +264,14 @@ export const trackedTabsRouter = {
       const userId = context.session.user.id;
       const tab = await requireOwnedTab(userId, input.id);
       await requireOwnedDevice(userId, input.deviceId);
+
+      if (tab.archivedAt) {
+        return {
+          skipped: true as const,
+          reason: "archived" as const,
+          tab: serializeTab(tab),
+        };
+      }
 
       if (tab.activeDeviceId && tab.activeDeviceId !== input.deviceId) {
         throw new ORPCError("CONFLICT", {
@@ -279,9 +378,7 @@ export const trackedTabsRouter = {
     .handler(async ({ context, input }) => {
       await db
         .delete(trackedTab)
-        .where(
-          and(eq(trackedTab.id, input.id), eq(trackedTab.userId, context.session.user.id)),
-        );
+        .where(and(eq(trackedTab.id, input.id), eq(trackedTab.userId, context.session.user.id)));
       return { ok: true as const };
     }),
 
