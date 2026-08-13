@@ -44,8 +44,8 @@ function serializeTab(
     name: row.name,
     emoji: row.emoji,
     tags: parseTags(row.tags),
-    collectionId: row.collectionId,
-    collection: row.collection ? { id: row.collection.id, name: row.collection.name } : null,
+    groupId: row.collectionId,
+    group: row.collection ? { id: row.collection.id, name: row.collection.name } : null,
     currentUrl: row.currentUrl,
     currentTitle: row.currentTitle,
     activeDeviceId: row.activeDeviceId,
@@ -112,12 +112,12 @@ async function requireOwnedDevice(userId: string, deviceId: string) {
   return row;
 }
 
-async function requireOwnedCollection(userId: string, collectionId: string) {
+async function requireOwnedGroup(userId: string, groupId: string) {
   const row = await db.query.collection.findFirst({
-    where: and(eq(collection.id, collectionId), eq(collection.userId, userId)),
+    where: and(eq(collection.id, groupId), eq(collection.userId, userId)),
   });
   if (!row) {
-    throw new ORPCError("BAD_REQUEST", { message: "Unknown collection" });
+    throw new ORPCError("BAD_REQUEST", { message: "Unknown group" });
   }
   return row;
 }
@@ -132,7 +132,7 @@ export const trackedTabsRouter = {
       z
         .object({
           archived: z.enum(["active", "archived", "all"]).optional(),
-          collectionId: z.string().min(1).nullable().optional(),
+          groupId: z.string().min(1).nullable().optional(),
         })
         .optional(),
     )
@@ -148,11 +148,11 @@ export const trackedTabsRouter = {
             ? isNotNull(trackedTab.archivedAt)
             : undefined;
       const collectionFilter =
-        input?.collectionId === undefined
+        input?.groupId === undefined
           ? undefined
-          : input.collectionId === null
+          : input.groupId === null
             ? isNull(trackedTab.collectionId)
-            : eq(trackedTab.collectionId, input.collectionId);
+            : eq(trackedTab.collectionId, input.groupId);
 
       const rows = await db.query.trackedTab.findMany({
         where: and(eq(trackedTab.userId, userId), archivedFilter, collectionFilter),
@@ -182,15 +182,15 @@ export const trackedTabsRouter = {
         tags: tagsSchema.optional(),
         url: z.string().url(),
         title: z.string().max(500).nullable().optional(),
-        collectionId: z.string().min(1).nullable().optional(),
+        groupId: z.string().min(1).nullable().optional(),
         isPrivate: z.boolean().optional(),
       }),
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireOwnedDevice(userId, input.deviceId);
-      if (input.collectionId) {
-        await requireOwnedCollection(userId, input.collectionId);
+      if (input.groupId) {
+        await requireOwnedGroup(userId, input.groupId);
       }
 
       const settings = await getOrCreateSettings(userId);
@@ -207,7 +207,7 @@ export const trackedTabsRouter = {
       await db.insert(trackedTab).values({
         id,
         userId,
-        collectionId: input.collectionId ?? null,
+        collectionId: input.groupId ?? null,
         name: input.name,
         emoji: input.emoji ?? null,
         tags: JSON.stringify(input.tags ?? []),
@@ -242,15 +242,15 @@ export const trackedTabsRouter = {
         name: z.string().min(1).max(120),
         emoji: z.string().max(8).nullable().optional(),
         tags: tagsSchema.optional(),
-        collectionId: z.string().min(1).nullable().optional(),
+        groupId: z.string().min(1).nullable().optional(),
         isPrivate: z.boolean().optional(),
       }),
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireOwnedTab(userId, input.id);
-      if (input.collectionId) {
-        await requireOwnedCollection(userId, input.collectionId);
+      if (input.groupId) {
+        await requireOwnedGroup(userId, input.groupId);
       }
       await db
         .update(trackedTab)
@@ -258,7 +258,7 @@ export const trackedTabsRouter = {
           name: input.name,
           ...(input.emoji !== undefined ? { emoji: input.emoji } : {}),
           ...(input.tags !== undefined ? { tags: JSON.stringify(input.tags) } : {}),
-          ...(input.collectionId !== undefined ? { collectionId: input.collectionId } : {}),
+          ...(input.groupId !== undefined ? { collectionId: input.groupId } : {}),
           ...(input.isPrivate !== undefined ? { isPrivate: input.isPrivate } : {}),
         })
         .where(eq(trackedTab.id, input.id));
@@ -350,17 +350,17 @@ export const trackedTabsRouter = {
     .input(
       z.object({
         ids: tabIdsSchema,
-        collectionId: z.string().min(1).nullable(),
+        groupId: z.string().min(1).nullable(),
       }),
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      if (input.collectionId) {
-        await requireOwnedCollection(userId, input.collectionId);
+      if (input.groupId) {
+        await requireOwnedGroup(userId, input.groupId);
       }
       await db
         .update(trackedTab)
-        .set({ collectionId: input.collectionId })
+        .set({ collectionId: input.groupId })
         .where(and(eq(trackedTab.userId, userId), inArray(trackedTab.id, input.ids)));
       return { ok: true as const };
     }),

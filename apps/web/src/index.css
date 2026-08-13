@@ -421,7 +421,7 @@
   color: var(--primary);
 }
 
-.dashboard-app .activity-toolbar__collections {
+.dashboard-app .activity-toolbar__groups {
   display: flex;
   gap: 0;
   width: 100%;
@@ -429,11 +429,11 @@
   scrollbar-width: none;
 }
 
-.dashboard-app .activity-toolbar__collections::-webkit-scrollbar {
+.dashboard-app .activity-toolbar__groups::-webkit-scrollbar {
   display: none;
 }
 
-.dashboard-app .activity-toolbar__collection-chip[data-slot="button"] {
+.dashboard-app .activity-toolbar__group-chip[data-slot="button"] {
   flex: 0 0 auto;
   height: 2.75rem;
   padding-inline: 0.8rem;
@@ -445,11 +445,11 @@
   box-shadow: none;
 }
 
-.dashboard-app .activity-toolbar__collection-chip[data-slot="button"]:hover {
+.dashboard-app .activity-toolbar__group-chip[data-slot="button"]:hover {
   background: color-mix(in oklch, var(--muted) 60%, transparent);
 }
 
-.dashboard-app .activity-toolbar__collection-chip[data-slot="button"][data-active] {
+.dashboard-app .activity-toolbar__group-chip[data-slot="button"][data-active] {
   border-bottom-color: var(--primary);
   background: transparent;
   color: var(--foreground);

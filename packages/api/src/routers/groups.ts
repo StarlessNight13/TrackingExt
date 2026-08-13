@@ -8,7 +8,7 @@ import { collection, trackedTab } from "@trackingext/db/schema/tracked";
 import { createId } from "../lib/ids";
 import { protectedProcedure } from "../index";
 
-function serializeCollection(
+function serializeGroup(
   row: typeof collection.$inferSelect,
   activityCount: number,
   pinned?: {
@@ -31,12 +31,12 @@ function serializeCollection(
   };
 }
 
-async function requireOwnedCollection(userId: string, collectionId: string) {
+async function requireOwnedGroup(userId: string, groupId: string) {
   const row = await db.query.collection.findFirst({
-    where: and(eq(collection.id, collectionId), eq(collection.userId, userId)),
+    where: and(eq(collection.id, groupId), eq(collection.userId, userId)),
   });
   if (!row) {
-    throw new ORPCError("NOT_FOUND", { message: "Collection not found" });
+    throw new ORPCError("NOT_FOUND", { message: "Group not found" });
   }
   return row;
 }
@@ -56,7 +56,7 @@ async function loadPinnedActivity(userId: string, pinnedId: string | null) {
   return tab ?? null;
 }
 
-export const collectionsRouter = {
+export const groupsRouter = {
   list: protectedProcedure.handler(async ({ context }) => {
     const userId = context.session.user.id;
     const rows = await db.query.collection.findMany({
@@ -75,17 +75,17 @@ export const collectionsRouter = {
       ),
       columns: { id: true, collectionId: true },
     });
-    const countByCollection = new Map<string, number>();
+    const countByGroup = new Map<string, number>();
     for (const tab of counts) {
       if (!tab.collectionId) continue;
-      countByCollection.set(tab.collectionId, (countByCollection.get(tab.collectionId) ?? 0) + 1);
+      countByGroup.set(tab.collectionId, (countByGroup.get(tab.collectionId) ?? 0) + 1);
     }
 
     return Promise.all(
       rows.map(async (row) =>
-        serializeCollection(
+        serializeGroup(
           row,
-          countByCollection.get(row.id) ?? 0,
+          countByGroup.get(row.id) ?? 0,
           await loadPinnedActivity(userId, row.pinnedTrackedTabId),
         ),
       ),
@@ -101,15 +101,15 @@ export const collectionsRouter = {
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      const id = createId("col");
+      const id = createId("grp");
       await db.insert(collection).values({
         id,
         userId,
         name: input.name,
         notes: input.notes ?? "",
       });
-      const row = await requireOwnedCollection(userId, id);
-      return serializeCollection(row, 0, null);
+      const row = await requireOwnedGroup(userId, id);
+      return serializeGroup(row, 0, null);
     }),
 
   update: protectedProcedure
@@ -123,7 +123,7 @@ export const collectionsRouter = {
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await requireOwnedCollection(userId, input.id);
+      await requireOwnedGroup(userId, input.id);
 
       if (input.pinnedTrackedTabId) {
         const tab = await db.query.trackedTab.findFirst({
@@ -151,12 +151,12 @@ export const collectionsRouter = {
         })
         .where(eq(collection.id, input.id));
 
-      const row = await requireOwnedCollection(userId, input.id);
+      const row = await requireOwnedGroup(userId, input.id);
       const countRows = await db.query.trackedTab.findMany({
         where: and(eq(trackedTab.userId, userId), eq(trackedTab.collectionId, input.id)),
         columns: { id: true },
       });
-      return serializeCollection(
+      return serializeGroup(
         row,
         countRows.length,
         await loadPinnedActivity(userId, row.pinnedTrackedTabId),
@@ -167,7 +167,7 @@ export const collectionsRouter = {
     .input(z.object({ id: z.string().min(1) }))
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await requireOwnedCollection(userId, input.id);
+      await requireOwnedGroup(userId, input.id);
       await db
         .update(trackedTab)
         .set({ collectionId: null })

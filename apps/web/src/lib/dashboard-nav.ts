@@ -12,7 +12,7 @@ import {
 export type DashboardNavItem = {
   to:
     | "/dashboard"
-    | "/dashboard/collections"
+    | "/dashboard/groups"
     | "/dashboard/devices"
     | "/dashboard/settings"
     | "/dashboard/sessions"
@@ -25,7 +25,7 @@ export type DashboardNavItem = {
 
 export const DASHBOARD_NAV: DashboardNavItem[] = [
   { to: "/dashboard", label: "Tracked", icon: Bookmark, exact: true },
-  { to: "/dashboard/collections", label: "Collections", icon: FolderKanban },
+  { to: "/dashboard/groups", label: "Groups", icon: FolderKanban },
   { to: "/dashboard/sync", label: "Sync", icon: Radio },
   { to: "/dashboard/devices", label: "Devices", icon: MonitorSmartphone },
   { to: "/dashboard/sessions", label: "Sessions", icon: KeyRound },

@@ -103,13 +103,13 @@ function HistoryUrl({ url, comparisonUrls }: { url: string; comparisonUrls: stri
 export function TrackedTabsPanel() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<"active" | "archived">("active");
-  const [collectionFilter, setCollectionFilter] = useState<string>("all");
+  const [groupFilter, setGroupFilter] = useState<string>("all");
   const tabsQuery = useQuery(orpc.trackedTabs.list.queryOptions({ input: { archived: view } }));
-  const collectionsQuery = useQuery(orpc.collections.list.queryOptions());
+  const groupsQuery = useQuery(orpc.groups.list.queryOptions());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editTags, setEditTags] = useState("");
-  const [editCollectionId, setEditCollectionId] = useState<string>("");
+  const [editGroupId, setEditGroupId] = useState<string>("");
   const [editPrivate, setEditPrivate] = useState(false);
   const [historyTabId, setHistoryTabId] = useState<string | null>(null);
   const [exportTabId, setExportTabId] = useState<string | null>(null);
@@ -117,7 +117,7 @@ export function TrackedTabsPanel() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkTagsOpen, setBulkTagsOpen] = useState(false);
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
-  const [bulkMoveCollectionId, setBulkMoveCollectionId] = useState<string>("");
+  const [bulkMoveGroupId, setBulkMoveGroupId] = useState<string>("");
   const [bulkTags, setBulkTags] = useState("");
   const [historySearch, setHistorySearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase());
@@ -197,7 +197,7 @@ export function TrackedTabsPanel() {
       await queryClient.invalidateQueries();
       setSelectedIds(new Set());
       setBulkMoveOpen(false);
-      setBulkMoveCollectionId("");
+      setBulkMoveGroupId("");
       toast.success("Activities moved");
     },
     onError: (error) => toast.error(error.message),
@@ -280,11 +280,11 @@ export function TrackedTabsPanel() {
   }
 
   const tabs = (tabsQuery.data ?? []).filter((tab) => {
-    if (collectionFilter === "none" && tab.collectionId) return false;
+    if (groupFilter === "none" && tab.groupId) return false;
     if (
-      collectionFilter !== "all" &&
-      collectionFilter !== "none" &&
-      tab.collectionId !== collectionFilter
+      groupFilter !== "all" &&
+      groupFilter !== "none" &&
+      tab.groupId !== groupFilter
     ) {
       return false;
     }
@@ -293,7 +293,7 @@ export function TrackedTabsPanel() {
       tab.name,
       tab.currentTitle ?? "",
       tab.currentUrl,
-      tab.collection?.name ?? "",
+      tab.group?.name ?? "",
       ...tab.tags,
     ]
       .join(" ")
@@ -301,7 +301,7 @@ export function TrackedTabsPanel() {
     return searchable.includes(deferredSearch);
   });
   const unhealthyCount = tabs.filter((tab) => tab.health.issues.length > 0).length;
-  const collections = collectionsQuery.data ?? [];
+  const groups = groupsQuery.data ?? [];
   const selectedVisibleIds = tabs.filter((tab) => selectedIds.has(tab.id)).map((tab) => tab.id);
 
   const toggleSelected = (id: string, checked: boolean) => {
@@ -347,15 +347,15 @@ export function TrackedTabsPanel() {
               </Button>
             </div>
           </div>
-          <div className="activity-toolbar__collections" role="tablist" aria-label="Filter by collection">
+          <div className="activity-toolbar__groups" role="tablist" aria-label="Filter by group">
               <Button
                 variant="ghost"
                 size="lg"
                 role="tab"
-                className="activity-toolbar__collection-chip"
-                aria-selected={collectionFilter === "all"}
-                data-active={collectionFilter === "all" || undefined}
-                onClick={() => setCollectionFilter("all")}
+                className="activity-toolbar__group-chip"
+                aria-selected={groupFilter === "all"}
+                data-active={groupFilter === "all" || undefined}
+                onClick={() => setGroupFilter("all")}
               >
                 All
               </Button>
@@ -363,25 +363,25 @@ export function TrackedTabsPanel() {
                 variant="ghost"
                 size="lg"
                 role="tab"
-                className="activity-toolbar__collection-chip"
-                aria-selected={collectionFilter === "none"}
-                data-active={collectionFilter === "none" || undefined}
-                onClick={() => setCollectionFilter("none")}
+                className="activity-toolbar__group-chip"
+                aria-selected={groupFilter === "none"}
+                data-active={groupFilter === "none" || undefined}
+                onClick={() => setGroupFilter("none")}
               >
                 Ungrouped
               </Button>
-              {collections.map((collection) => (
+              {groups.map((group) => (
                 <Button
-                  key={collection.id}
+                  key={group.id}
                   variant="ghost"
                   size="lg"
                   role="tab"
-                  className="activity-toolbar__collection-chip"
-                  aria-selected={collectionFilter === collection.id}
-                  data-active={collectionFilter === collection.id || undefined}
-                  onClick={() => setCollectionFilter(collection.id)}
+                  className="activity-toolbar__group-chip"
+                  aria-selected={groupFilter === group.id}
+                  data-active={groupFilter === group.id || undefined}
+                  onClick={() => setGroupFilter(group.id)}
                 >
-                  {collection.name}
+                  {group.name}
                 </Button>
               ))}
           </div>
@@ -500,7 +500,7 @@ export function TrackedTabsPanel() {
                     </div>
                   ) : null}
                   <div className="flex flex-wrap gap-1 pt-1">
-                    {tab.collection ? <Badge variant="secondary">{tab.collection.name}</Badge> : null}
+                    {tab.group ? <Badge variant="secondary">{tab.group.name}</Badge> : null}
                     {tab.isPrivate ? (
                       <Badge variant="outline">
                         <Lock className="size-3" />
@@ -578,7 +578,7 @@ export function TrackedTabsPanel() {
                   setEditingId(tab.id);
                   setEditName(tab.name);
                   setEditTags(tab.tags.join(", "));
-                  setEditCollectionId(tab.collectionId ?? "");
+                  setEditGroupId(tab.groupId ?? "");
                   setEditPrivate(tab.isPrivate);
                 }}
               >
@@ -634,7 +634,7 @@ export function TrackedTabsPanel() {
           <DialogHeader>
             <DialogTitle>Edit activity</DialogTitle>
             <DialogDescription>
-              Update the name, tags, collection, and private mode for this activity.
+              Update the name, tags, group, and private mode for this activity.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
@@ -657,17 +657,17 @@ export function TrackedTabsPanel() {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="tracked-collection">Collection</Label>
+              <Label htmlFor="tracked-group">Group</Label>
               <MenuSelect
-                id="tracked-collection"
-                aria-label="Collection"
-                value={editCollectionId}
-                onValueChange={setEditCollectionId}
+                id="tracked-group"
+                aria-label="Group"
+                value={editGroupId}
+                onValueChange={setEditGroupId}
                 options={[
                   { value: "", label: "Ungrouped" },
-                  ...collections.map((collection) => ({
-                    value: collection.id,
-                    label: collection.name,
+                  ...groups.map((group) => ({
+                    value: group.id,
+                    label: group.name,
                   })),
                 ]}
               />
@@ -695,7 +695,7 @@ export function TrackedTabsPanel() {
                     .split(",")
                     .map((tag) => tag.trim())
                     .filter(Boolean),
-                  collectionId: editCollectionId || null,
+                  groupId: editGroupId || null,
                   isPrivate: editPrivate,
                 });
               }}
@@ -809,18 +809,18 @@ export function TrackedTabsPanel() {
           <DialogHeader>
             <DialogTitle>Move selected activities</DialogTitle>
             <DialogDescription>
-              Assign the selected activities to a collection, or leave them ungrouped.
+              Assign the selected activities to a group, or leave them ungrouped.
             </DialogDescription>
           </DialogHeader>
           <MenuSelect
-            aria-label="Destination collection"
-            value={bulkMoveCollectionId}
-            onValueChange={setBulkMoveCollectionId}
+            aria-label="Destination group"
+            value={bulkMoveGroupId}
+            onValueChange={setBulkMoveGroupId}
             options={[
               { value: "", label: "Ungrouped" },
-              ...collections.map((collection) => ({
-                value: collection.id,
-                label: collection.name,
+              ...groups.map((group) => ({
+                value: group.id,
+                label: group.name,
               })),
             ]}
           />
@@ -833,7 +833,7 @@ export function TrackedTabsPanel() {
               onClick={() =>
                 bulkMoveMutation.mutate({
                   ids: selectedVisibleIds,
-                  collectionId: bulkMoveCollectionId || null,
+                  groupId: bulkMoveGroupId || null,
                 })
               }
             >

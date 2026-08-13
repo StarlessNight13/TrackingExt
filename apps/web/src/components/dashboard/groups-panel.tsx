@@ -36,9 +36,9 @@ import { displayHostPath } from "@/lib/format";
 import { MenuSelect } from "@/components/menu-select";
 import { orpc } from "@/utils/orpc";
 
-export function CollectionsPanel() {
+export function GroupsPanel() {
   const queryClient = useQueryClient();
-  const collectionsQuery = useQuery(orpc.collections.list.queryOptions());
+  const groupsQuery = useQuery(orpc.groups.list.queryOptions());
   const tabsQuery = useQuery(orpc.trackedTabs.list.queryOptions({ input: { archived: "active" } }));
   const [createOpen, setCreateOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -51,37 +51,37 @@ export function CollectionsPanel() {
   };
 
   const createMutation = useMutation({
-    ...orpc.collections.create.mutationOptions(),
+    ...orpc.groups.create.mutationOptions(),
     onSuccess: async () => {
       await invalidate();
       setCreateOpen(false);
       setName("");
       setNotes("");
-      toast.success("Collection created");
+      toast.success("Group created");
     },
     onError: (error) => toast.error(error.message),
   });
 
   const updateMutation = useMutation({
-    ...orpc.collections.update.mutationOptions(),
+    ...orpc.groups.update.mutationOptions(),
     onSuccess: async () => {
       await invalidate();
       setEditingId(null);
-      toast.success("Collection updated");
+      toast.success("Group updated");
     },
     onError: (error) => toast.error(error.message),
   });
 
   const deleteMutation = useMutation({
-    ...orpc.collections.delete.mutationOptions(),
+    ...orpc.groups.delete.mutationOptions(),
     onSuccess: async () => {
       await invalidate();
-      toast.success("Collection deleted");
+      toast.success("Group deleted");
     },
     onError: (error) => toast.error(error.message),
   });
 
-  if (collectionsQuery.isLoading) {
+  if (groupsQuery.isLoading) {
     return (
       <div className="flex flex-col gap-3">
         <Skeleton className="h-28 w-full" />
@@ -90,15 +90,15 @@ export function CollectionsPanel() {
     );
   }
 
-  if (collectionsQuery.isError) {
+  if (groupsQuery.isError) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Couldn’t load collections</CardTitle>
-          <CardDescription>{collectionsQuery.error.message}</CardDescription>
+          <CardTitle>Couldn’t load groups</CardTitle>
+          <CardDescription>{groupsQuery.error.message}</CardDescription>
         </CardHeader>
         <CardFooter>
-          <Button variant="outline" onClick={() => void collectionsQuery.refetch()}>
+          <Button variant="outline" onClick={() => void groupsQuery.refetch()}>
             Retry
           </Button>
         </CardFooter>
@@ -106,15 +106,15 @@ export function CollectionsPanel() {
     );
   }
 
-  const collections = collectionsQuery.data ?? [];
+  const groups = groupsQuery.data ?? [];
   const tabs = tabsQuery.data ?? [];
-  const editing = collections.find((collection) => collection.id === editingId) ?? null;
+  const editing = groups.find((group) => group.id === editingId) ?? null;
 
   return (
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Collections</CardTitle>
+          <CardTitle>Groups</CardTitle>
           <CardDescription>
             Group activities into projects with notes and a pinned next activity.
           </CardDescription>
@@ -127,58 +127,58 @@ export function CollectionsPanel() {
               setCreateOpen(true);
             }}
           >
-            New collection
+            New group
           </Button>
         </CardFooter>
       </Card>
 
-      {collections.length === 0 ? (
+      {groups.length === 0 ? (
         <Empty className="border border-dashed">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <FolderKanban />
             </EmptyMedia>
-            <EmptyTitle>No collections yet</EmptyTitle>
+            <EmptyTitle>No groups yet</EmptyTitle>
             <EmptyDescription>
-              Create a collection to organize related activities into a workspace.
+              Create a group to organize related activities into a workspace.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : null}
 
       <div className="card-stack">
-        {collections.map((collection) => (
-          <Card key={collection.id}>
+        {groups.map((group) => (
+          <Card key={group.id}>
             <CardHeader>
-              <CardTitle className="text-base">{collection.name}</CardTitle>
+              <CardTitle className="text-base">{group.name}</CardTitle>
               <CardDescription>
-                {collection.activityCount}{" "}
-                {collection.activityCount === 1 ? "activity" : "activities"}
+                {group.activityCount}{" "}
+                {group.activityCount === 1 ? "activity" : "activities"}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              {collection.notes ? (
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{collection.notes}</p>
+              {group.notes ? (
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{group.notes}</p>
               ) : (
                 <p className="text-sm text-muted-foreground">No notes yet.</p>
               )}
-              {collection.pinnedActivity ? (
+              {group.pinnedActivity ? (
                 <div className="flex flex-col gap-1 border border-border px-3 py-2">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Pin className="size-4" />
-                    Next up: {collection.pinnedActivity.emoji
-                      ? `${collection.pinnedActivity.emoji} `
+                    Next up: {group.pinnedActivity.emoji
+                      ? `${group.pinnedActivity.emoji} `
                       : ""}
-                    {collection.pinnedActivity.name}
+                    {group.pinnedActivity.name}
                   </div>
                   <a
-                    href={collection.pinnedActivity.currentUrl}
+                    href={group.pinnedActivity.currentUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="truncate text-sm text-muted-foreground underline-offset-4 hover:underline"
                   >
-                    {collection.pinnedActivity.currentTitle ||
-                      displayHostPath(collection.pinnedActivity.currentUrl)}
+                    {group.pinnedActivity.currentTitle ||
+                      displayHostPath(group.pinnedActivity.currentUrl)}
                   </a>
                 </div>
               ) : (
@@ -186,11 +186,11 @@ export function CollectionsPanel() {
               )}
             </CardContent>
             <CardFooter className="flex flex-wrap gap-2.5">
-              {collection.pinnedActivity ? (
+              {group.pinnedActivity ? (
                 <Button
                   render={
                     <a
-                      href={collection.pinnedActivity.currentUrl}
+                      href={group.pinnedActivity.currentUrl}
                       target="_blank"
                       rel="noreferrer"
                     />
@@ -203,10 +203,10 @@ export function CollectionsPanel() {
               <Button
                 variant="secondary"
                 onClick={() => {
-                  setEditingId(collection.id);
-                  setName(collection.name);
-                  setNotes(collection.notes);
-                  setPinnedId(collection.pinnedTrackedTabId ?? "");
+                  setEditingId(group.id);
+                  setName(group.name);
+                  setNotes(group.notes);
+                  setPinnedId(group.pinnedTrackedTabId ?? "");
                 }}
               >
                 <Pencil data-icon="inline-start" />
@@ -218,10 +218,10 @@ export function CollectionsPanel() {
                 onClick={() => {
                   if (
                     confirm(
-                      `Delete collection “${collection.name}”? Activities stay tracked but ungrouped.`,
+                      `Delete group “${group.name}”? Activities stay tracked but ungrouped.`,
                     )
                   ) {
-                    deleteMutation.mutate({ id: collection.id });
+                    deleteMutation.mutate({ id: group.id });
                   }
                 }}
               >
@@ -236,23 +236,23 @@ export function CollectionsPanel() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New collection</DialogTitle>
+            <DialogTitle>New group</DialogTitle>
             <DialogDescription>Name a workspace and optionally add notes.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="collection-name">Name</Label>
+              <Label htmlFor="group-name">Name</Label>
               <Input
-                id="collection-name"
+                id="group-name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 autoFocus
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="collection-notes">Notes</Label>
+              <Label htmlFor="group-notes">Notes</Label>
               <Textarea
-                id="collection-notes"
+                id="group-notes"
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
                 rows={4}
@@ -281,40 +281,40 @@ export function CollectionsPanel() {
       <Dialog open={Boolean(editing)} onOpenChange={(open) => !open && setEditingId(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit collection</DialogTitle>
+            <DialogTitle>Edit group</DialogTitle>
             <DialogDescription>
               Update notes and choose which activity is pinned as next.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="edit-collection-name">Name</Label>
+              <Label htmlFor="edit-group-name">Name</Label>
               <Input
-                id="edit-collection-name"
+                id="edit-group-name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="edit-collection-notes">Notes</Label>
+              <Label htmlFor="edit-group-notes">Notes</Label>
               <Textarea
-                id="edit-collection-notes"
+                id="edit-group-notes"
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
                 rows={4}
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="edit-collection-pin">Pinned next activity</Label>
+              <Label htmlFor="edit-group-pin">Pinned next activity</Label>
               <MenuSelect
-                id="edit-collection-pin"
+                id="edit-group-pin"
                 aria-label="Pinned next activity"
                 value={pinnedId}
                 onValueChange={setPinnedId}
                 options={[
                   { value: "", label: "None" },
                   ...tabs
-                    .filter((tab) => !editing || tab.collectionId === editing.id || !tab.collectionId)
+                    .filter((tab) => !editing || tab.groupId === editing.id || !tab.groupId)
                     .map((tab) => ({
                       value: tab.id,
                       label: `${tab.emoji ? `${tab.emoji} ` : ""}${tab.name}`,

@@ -46,8 +46,8 @@ export type TrackedTab = {
   name: string;
   emoji: string | null;
   tags: string[];
-  collectionId: string | null;
-  collection: { id: string; name: string } | null;
+  groupId: string | null;
+  group: { id: string; name: string } | null;
   currentUrl: string;
   currentTitle: string | null;
   activeDeviceId: string | null;

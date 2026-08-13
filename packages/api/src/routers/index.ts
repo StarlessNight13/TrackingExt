@@ -4,7 +4,7 @@ import { getAuthPublicConfig } from "@trackingext/env/server";
 
 import { protectedProcedure, publicProcedure } from "../index";
 import { devicesRouter } from "./devices";
-import { collectionsRouter } from "./collections";
+import { groupsRouter } from "./groups";
 import { lanSyncRouter } from "./lan-sync";
 import { settingsRouter } from "./settings";
 import { trackedTabsRouter } from "./tracked-tabs";
@@ -23,7 +23,7 @@ export const appRouter = {
     };
   }),
   devices: devicesRouter,
-  collections: collectionsRouter,
+  groups: groupsRouter,
   trackedTabs: trackedTabsRouter,
   settings: settingsRouter,
   lanSync: lanSyncRouter,
