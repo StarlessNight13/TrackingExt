@@ -4,11 +4,13 @@ import { displayHostPath } from "@/lib/privacy";
 import { DEFAULT_SERVER_URL, normalizeServerUrl } from "@/lib/server-url";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import { HistoryView } from "@/components/history-view";
+import { ResumePicker } from "@/components/resume-picker";
 import { openDashboard, openWebDashboard, usesWebDashboard } from "@/lib/open-dashboard";
 import { describeSyncModes, needsServerUrl as needsServerUrlForModes } from "@/lib/sync-modes";
 import type { LanSignalingMode, PrivacySettings, SyncModes, TrackedTab } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import { formatDevice, relativeTime } from "@/lib/view-utils";
+
 
 import { AuthPanel } from "./components/auth-panel";
 import { ExtensionThemeProvider } from "./components/extension-theme-provider";
@@ -17,7 +19,7 @@ import { LanPairingPanel } from "./components/lan-pairing-panel";
 import { M3SwitchRow } from "./components/m3-switch";
 import { OnboardingWizard } from "./components/onboarding-wizard";
 
-type View = "main" | "settings" | "history";
+type View = "main" | "settings" | "history" | "resume";
 
 function SettingsView({
   snapshot,
@@ -417,11 +419,13 @@ function MainView({
   onUpdate,
   onOpenSettings,
   onOpenHistory,
+  onOpenResume,
 }: {
   snapshot: PopupSnapshot;
   onUpdate: (snapshot: PopupSnapshot) => void;
   onOpenSettings: () => void;
   onOpenHistory: (tab: TrackedTab) => void;
+  onOpenResume: () => void;
 }) {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -656,7 +660,16 @@ function MainView({
       </div>
 
       <div className="section">
-        <h2 className="section-title">Tracked Tabs</h2>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <h2 className="section-title" style={{ margin: 0 }}>
+            Tracked Tabs
+          </h2>
+          {snapshot.trackedTabs.length > 0 ? (
+            <button className="btn secondary" type="button" onClick={onOpenResume}>
+              Resume…
+            </button>
+          ) : null}
+        </div>
         {otherTabs.length === 0 ? (
           <div className="empty">
             {tracked ? "No other tracked tabs." : "No tracked tabs yet."}
@@ -668,12 +681,13 @@ function MainView({
                 key={tab.id}
                 className="list-item"
                 disabled={pending}
+                title="Resume on this device (open & take over)"
                 onClick={() =>
                   run(async () => {
                     const res = await sendMessage({
                       type: "OPEN_TAB",
                       trackedTabId: tab.id,
-                      takeOver: false,
+                      takeOver: true,
                     });
                     if (!res.ok) throw new Error(res.error);
                     if (res.snapshot) onUpdate(res.snapshot);
@@ -689,7 +703,7 @@ function MainView({
                   {tab.currentTitle || displayHostPath(tab.currentUrl)}
                 </span>
                 <span className="sub">
-                  {formatDevice(tab)} · {relativeTime(tab.lastUpdatedAt)}
+                  Resume · {formatDevice(tab)} · {relativeTime(tab.lastUpdatedAt)}
                 </span>
               </button>
             ))}
@@ -802,6 +816,13 @@ function App() {
           }}
           onUpdate={setSnapshot}
         />
+      ) : view === "resume" ? (
+        <ResumePicker
+          snapshot={snapshot}
+          onUpdate={setSnapshot}
+          onBack={() => setView("main")}
+          closeOnResume
+        />
       ) : (
         <MainView
           snapshot={snapshot}
@@ -817,6 +838,7 @@ function App() {
             setHistoryTab(tab);
             setView("history");
           }}
+          onOpenResume={() => setView("resume")}
         />
       )}
       </div>

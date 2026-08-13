@@ -238,8 +238,28 @@ function LocalTabsPanel({
                 ) : (
                   <>
                     <button
+                      className="btn"
+                      disabled={pending}
+                      title="Open and take ownership on this device"
+                      onClick={() =>
+                        run(async () => {
+                          const res = await sendMessage({
+                            type: "OPEN_TAB",
+                            trackedTabId: tracked.id,
+                            takeOver: true,
+                          });
+                          if (!res.ok) throw new Error(res.error);
+                          if (res.snapshot) onUpdate(res.snapshot);
+                          if (closeOnOpenTab) window.close();
+                        })
+                      }
+                    >
+                      Resume
+                    </button>
+                    <button
                       className="btn secondary"
                       disabled={pending}
+                      title="Open without taking ownership"
                       onClick={() =>
                         run(async () => {
                           const res = await sendMessage({

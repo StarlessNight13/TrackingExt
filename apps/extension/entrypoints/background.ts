@@ -523,6 +523,22 @@ async function startLanSyncIfEnabled() {
   }
 }
 
+const RESUME_COMMAND = "resume-activity";
+
+async function openResumePicker() {
+  const url = browser.runtime.getURL("/resume.html");
+  const existing = await browser.tabs.query({ url });
+  const tab = existing[0];
+  if (tab?.id !== undefined) {
+    await browser.tabs.update(tab.id, { active: true });
+    if (tab.windowId !== undefined) {
+      await browser.windows.update(tab.windowId, { focused: true });
+    }
+    return;
+  }
+  await browser.tabs.create({ url, active: true });
+}
+
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (isOffscreenLanMessage(message)) return false;
@@ -539,10 +555,16 @@ export default defineBackground(() => {
   void ensureContextMenus();
   void startLanSyncIfEnabled();
 
+  browser.commands.onCommand.addListener((command) => {
+    if (command !== RESUME_COMMAND) return;
+    void openResumePicker();
+  });
+
   browser.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId !== TRACK_CONTEXT_MENU_ID) return;
     void trackFromContextMenu(tab?.id);
   });
+
 
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (!changeInfo.url && !changeInfo.title && changeInfo.status !== "complete") return;

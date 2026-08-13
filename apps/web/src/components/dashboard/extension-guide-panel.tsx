@@ -31,7 +31,7 @@ const STEPS = [
   },
   {
     title: "Continue on another browser",
-    body: "Open this dashboard or another extension install, then Open or Open & take over so only one device actively updates the URL.",
+    body: "Open this dashboard or another extension install, then Resume (open & take over) so only one device actively updates the URL. In the extension, press Alt+Shift+R for the resume picker.",
   },
 ] as const;
 

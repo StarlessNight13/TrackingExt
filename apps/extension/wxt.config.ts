@@ -22,6 +22,15 @@ export default defineConfig({
       "Mark tabs as persistent activities that sync across Firefox and Chromium browsers.",
     permissions: ["tabs", "storage", "alarms", "contextMenus", "notifications", "offscreen"],
     host_permissions: ["<all_urls>"],
+    commands: {
+      "resume-activity": {
+        suggested_key: {
+          default: "Alt+Shift+R",
+          mac: "Alt+Shift+R",
+        },
+        description: "Resume a tracked activity (open & take over)",
+      },
+    },
     browser_specific_settings: {
       gecko: {
         id: "trackingext@trackingext.local",
@@ -33,3 +42,4 @@ export default defineConfig({
     },
   },
 });
+

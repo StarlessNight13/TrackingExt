@@ -34,17 +34,28 @@ import {
   ArchiveRestore,
   Bookmark,
   BookmarkX,
+  Copy,
+  Download,
   ExternalLink,
   History,
   Pencil,
   Play,
   Search,
+  Share2,
   Tags,
   Trash2,
 } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  activityExportToJson,
+  activityExportToLinks,
+  activityExportToMarkdown,
+  buildActivityExport,
+  downloadTextFile,
+  slugifyFilename,
+} from "@/lib/activity-export";
 import { displayHostPath, relativeTime } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
@@ -69,6 +80,7 @@ export function TrackedTabsPanel() {
   const [editName, setEditName] = useState("");
   const [editTags, setEditTags] = useState("");
   const [historyTabId, setHistoryTabId] = useState<string | null>(null);
+  const [exportTabId, setExportTabId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkTagsOpen, setBulkTagsOpen] = useState(false);
@@ -148,6 +160,13 @@ export function TrackedTabsPanel() {
   const historyQuery = useQuery({
     ...orpc.trackedTabs.history.queryOptions({ input: { id: historyTabId ?? "" } }),
     enabled: Boolean(historyTabId),
+  });
+
+  const exportHistoryQuery = useQuery({
+    ...orpc.trackedTabs.history.queryOptions({
+      input: { id: exportTabId ?? "", limit: 200 },
+    }),
+    enabled: Boolean(exportTabId),
   });
 
   const clearHistoryMutation = useMutation({
@@ -389,6 +408,10 @@ export function TrackedTabsPanel() {
                 <History data-icon="inline-start" />
                 History
               </Button>
+              <Button variant="outline" onClick={() => setExportTabId(tab.id)}>
+                <Share2 data-icon="inline-start" />
+                Export
+              </Button>
               {view === "active" ? (
                 <Button
                   variant="outline"
@@ -565,6 +588,103 @@ export function TrackedTabsPanel() {
               }
             >
               Add tags
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(exportTabId)} onOpenChange={(open) => !open && setExportTabId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export activity</DialogTitle>
+            <DialogDescription>
+              Download or copy this activity as JSON, Markdown, or a plain list of links.
+            </DialogDescription>
+          </DialogHeader>
+          {exportHistoryQuery.isLoading ? <Skeleton className="h-16 w-full" /> : null}
+          <div className="flex flex-col gap-2">
+            {(
+              [
+                {
+                  id: "json",
+                  label: "JSON",
+                  extension: "json",
+                  mime: "application/json",
+                  build: activityExportToJson,
+                },
+                {
+                  id: "markdown",
+                  label: "Markdown",
+                  extension: "md",
+                  mime: "text/markdown",
+                  build: activityExportToMarkdown,
+                },
+                {
+                  id: "links",
+                  label: "Links",
+                  extension: "txt",
+                  mime: "text/plain",
+                  build: activityExportToLinks,
+                },
+              ] as const
+            ).map((format) => (
+              <div
+                key={format.id}
+                className="flex flex-wrap items-center justify-between gap-2 border border-border px-3 py-2"
+              >
+                <span className="font-medium">{format.label}</span>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!exportTabId || exportHistoryQuery.isLoading}
+                    onClick={async () => {
+                      const tab = (tabsQuery.data ?? []).find((item) => item.id === exportTabId);
+                      if (!tab) return;
+                      const payload = buildActivityExport(
+                        tab,
+                        (exportHistoryQuery.data as HistoryEntry[] | undefined) ?? [],
+                      );
+                      const text = format.build(payload);
+                      try {
+                        await navigator.clipboard.writeText(text);
+                        toast.success(`${format.label} copied`);
+                      } catch {
+                        toast.error("Could not copy to clipboard");
+                      }
+                    }}
+                  >
+                    <Copy data-icon="inline-start" />
+                    Copy
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!exportTabId || exportHistoryQuery.isLoading}
+                    onClick={() => {
+                      const tab = (tabsQuery.data ?? []).find((item) => item.id === exportTabId);
+                      if (!tab) return;
+                      const payload = buildActivityExport(
+                        tab,
+                        (exportHistoryQuery.data as HistoryEntry[] | undefined) ?? [],
+                      );
+                      downloadTextFile(
+                        `${slugifyFilename(tab.name)}.${format.extension}`,
+                        format.build(payload),
+                        format.mime,
+                      );
+                      toast.success(`${format.label} downloaded`);
+                    }}
+                  >
+                    <Download data-icon="inline-start" />
+                    Download
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportTabId(null)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
