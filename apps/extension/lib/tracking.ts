@@ -1,4 +1,5 @@
 import { getApiClient } from "./api";
+import { hasSameHostname } from "@trackingext/api/lib/url-pattern";
 import { ensureDeviceRegistered } from "./device";
 import { ensureLocalDeviceId, getEffectiveDeviceId } from "./local-device";
 import { displayHostPath, isExcludedHost, isTrackableUrl, sanitizeUrl } from "./privacy";
@@ -194,6 +195,9 @@ export async function handleTabUpdate(tabId: number, url?: string, title?: strin
 
   const sanitized = sanitizeUrl(url, state.settings);
   if (isExcludedHost(sanitized, state.settings.excludedHosts)) return;
+  // A tracked activity is intentionally confined to the site where it started.
+  // This ignores ad hops and off-site redirects without stopping the binding.
+  if (tracked && !hasSameHostname(tracked.currentUrl, sanitized)) return;
   const cleanTitle = stripTrackedTabBadge(title ?? null, tracked?.emoji) ?? null;
   const deviceId = await getEffectiveDeviceId();
 

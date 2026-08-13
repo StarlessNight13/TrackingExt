@@ -101,6 +101,7 @@ async function buildSnapshot(): Promise<PopupSnapshot> {
     currentTab,
     trackedTabs: state.cachedTabs,
     pendingReconnect: state.pendingReconnect,
+    pendingSyncCount: Object.keys(state.queuedLocationUpdates).length,
     settings: state.settings,
   };
 }

@@ -87,6 +87,35 @@ describe("tracked tabs API flow", () => {
     ]);
   });
 
+  it("keeps a tracked activity on its original domain", async () => {
+    const token = await signUp();
+    const deviceRes = await rpc<{ json: { id: string } }>(token, "devices/register", {
+      name: "Home PC · Firefox",
+      browser: "Firefox",
+    });
+    const deviceId = deviceRes.json.json.id;
+    const created = await rpc<{ json: { id: string } }>(token, "trackedTabs/create", {
+      deviceId,
+      name: "Novel",
+      url: "https://reader.example.com/chapter/183",
+    });
+
+    const update = await rpc<{
+      json: { skipped: boolean; reason?: string; tab: { currentUrl: string } };
+    }>(token, "trackedTabs/updateLocation", {
+      id: created.json.json.id,
+      deviceId,
+      url: "https://ads.example.net/click",
+    });
+
+    expect(update.status).toBe(200);
+    expect(update.json.json).toMatchObject({
+      skipped: true,
+      reason: "different_domain",
+      tab: { currentUrl: "https://reader.example.com/chapter/183" },
+    });
+  });
+
   it("blocks location updates from a non-owner device until takeOver", async () => {
     const token = await signUp();
 

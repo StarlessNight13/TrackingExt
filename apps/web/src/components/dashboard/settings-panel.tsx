@@ -212,6 +212,37 @@ export function SettingsPanel() {
 
       <Card>
         <CardHeader>
+          <CardTitle>History retention</CardTitle>
+          <CardDescription>
+            Automatically delete tracked-tab history older than the selected window. Forever keeps
+            everything until you clear it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {(
+            [
+              { value: null, label: "Forever" },
+              { value: 7 as const, label: "7 days" },
+              { value: 30 as const, label: "30 days" },
+              { value: 90 as const, label: "90 days" },
+            ] as const
+          ).map((option) => (
+            <Button
+              key={String(option.value)}
+              type="button"
+              size="sm"
+              variant={settings.historyRetentionDays === option.value ? "default" : "secondary"}
+              disabled={updateMutation.isPending}
+              onClick={() => updateMutation.mutate({ historyRetentionDays: option.value })}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Excluded websites</CardTitle>
           <CardDescription>
             Hostnames that should never be tracked, one per line (for example mail.google.com).

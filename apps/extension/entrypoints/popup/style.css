@@ -199,6 +199,14 @@ a {
   font-size: 12px;
 }
 
+.url-diff-changed {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent-foreground);
+  font: inherit;
+}
+
 .title {
   margin: 0;
   font-size: 16px;

@@ -1,9 +1,23 @@
 import { useEffect, useState, useTransition } from "react";
+import { getUrlPatternParts } from "@trackingext/api/lib/url-pattern";
 
 import { displayHostPath } from "@/lib/privacy";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import type { HistoryEntry, TrackedTab } from "@/lib/types";
 import { relativeTime } from "@/lib/view-utils";
+
+function HistoryUrl({ url, comparisonUrls }: { url: string; comparisonUrls: string[] }) {
+  const displayUrl = displayHostPath(url);
+  const parts = getUrlPatternParts(displayUrl, comparisonUrls);
+
+  return (
+    <>
+      {parts.fixedStart}
+      {parts.changing ? <mark className="url-diff-changed">{parts.changing}</mark> : null}
+      {parts.fixedEnd}
+    </>
+  );
+}
 
 export function HistoryView({
   tab,
@@ -41,6 +55,7 @@ export function HistoryView({
       if (res.snapshot) onUpdate(res.snapshot);
     });
   };
+  const historyUrls = entries.map((entry) => displayHostPath(entry.url));
 
   return (
     <div className="stack">
@@ -73,7 +88,8 @@ export function HistoryView({
               >
                 <span className="name">{entry.title || displayHostPath(entry.url)}</span>
                 <span className="sub">
-                  {displayHostPath(entry.url)} · {relativeTime(entry.visitedAt)}
+                  <HistoryUrl url={entry.url} comparisonUrls={historyUrls} /> ·{" "}
+                  {relativeTime(entry.visitedAt)}
                 </span>
               </button>
             ))}

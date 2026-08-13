@@ -1,4 +1,5 @@
 import { Badge } from "@trackingext/ui/components/badge";
+import { getUrlPatternParts } from "@trackingext/api/lib/url-pattern";
 import { Button } from "@trackingext/ui/components/button";
 import {
   Card,
@@ -37,13 +38,17 @@ import {
   Copy,
   Download,
   ExternalLink,
+  FolderInput,
   History,
+  Lock,
   Pencil,
   Play,
   Search,
   Share2,
   Tags,
   Trash2,
+  TriangleAlert,
+  Unplug,
 } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -72,18 +77,41 @@ function formatHistoryTime(iso: string) {
   );
 }
 
+function HistoryUrl({ url, comparisonUrls }: { url: string; comparisonUrls: string[] }) {
+  const displayUrl = displayHostPath(url);
+  const parts = getUrlPatternParts(displayUrl, comparisonUrls);
+
+  return (
+    <>
+      {parts.fixedStart}
+      {parts.changing ? (
+        <mark className="rounded-sm bg-secondary px-0.5 text-secondary-foreground">
+          {parts.changing}
+        </mark>
+      ) : null}
+      {parts.fixedEnd}
+    </>
+  );
+}
+
 export function TrackedTabsPanel() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<"active" | "archived">("active");
+  const [collectionFilter, setCollectionFilter] = useState<string>("all");
   const tabsQuery = useQuery(orpc.trackedTabs.list.queryOptions({ input: { archived: view } }));
+  const collectionsQuery = useQuery(orpc.collections.list.queryOptions());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editTags, setEditTags] = useState("");
+  const [editCollectionId, setEditCollectionId] = useState<string>("");
+  const [editPrivate, setEditPrivate] = useState(false);
   const [historyTabId, setHistoryTabId] = useState<string | null>(null);
   const [exportTabId, setExportTabId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkTagsOpen, setBulkTagsOpen] = useState(false);
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [bulkMoveCollectionId, setBulkMoveCollectionId] = useState<string>("");
   const [bulkTags, setBulkTags] = useState("");
   const [historySearch, setHistorySearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase());
@@ -157,6 +185,27 @@ export function TrackedTabsPanel() {
     onError: (error) => toast.error(error.message),
   });
 
+  const bulkMoveMutation = useMutation({
+    ...orpc.trackedTabs.bulkMove.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      setSelectedIds(new Set());
+      setBulkMoveOpen(false);
+      setBulkMoveCollectionId("");
+      toast.success("Activities moved");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const releaseMutation = useMutation({
+    ...orpc.trackedTabs.release.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      toast.success("Ownership released");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const historyQuery = useQuery({
     ...orpc.trackedTabs.history.queryOptions({ input: { id: historyTabId ?? "" } }),
     enabled: Boolean(historyTabId),
@@ -208,12 +257,28 @@ export function TrackedTabsPanel() {
   }
 
   const tabs = (tabsQuery.data ?? []).filter((tab) => {
+    if (collectionFilter === "none" && tab.collectionId) return false;
+    if (
+      collectionFilter !== "all" &&
+      collectionFilter !== "none" &&
+      tab.collectionId !== collectionFilter
+    ) {
+      return false;
+    }
     if (!deferredSearch) return true;
-    const searchable = [tab.name, tab.currentTitle ?? "", tab.currentUrl, ...tab.tags]
+    const searchable = [
+      tab.name,
+      tab.currentTitle ?? "",
+      tab.currentUrl,
+      tab.collection?.name ?? "",
+      ...tab.tags,
+    ]
       .join(" ")
       .toLocaleLowerCase();
     return searchable.includes(deferredSearch);
   });
+  const unhealthyCount = tabs.filter((tab) => tab.health.issues.length > 0).length;
+  const collections = collectionsQuery.data ?? [];
   const selectedVisibleIds = tabs.filter((tab) => selectedIds.has(tab.id)).map((tab) => tab.id);
   const historyEntries = useMemo(() => {
     const query = historySearch.trim().toLocaleLowerCase();
@@ -224,6 +289,13 @@ export function TrackedTabsPanel() {
         )
       : entries;
   }, [historyQuery.data, historySearch]);
+  const historyUrls = useMemo(
+    () =>
+      ((historyQuery.data as HistoryEntry[] | undefined) ?? []).map((entry) =>
+        displayHostPath(entry.url),
+      ),
+    [historyQuery.data],
+  );
 
   const toggleSelected = (id: string, checked: boolean) => {
     setSelectedIds((current) => {
@@ -247,7 +319,21 @@ export function TrackedTabsPanel() {
               aria-label="Search tracked activities"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+              value={collectionFilter}
+              onChange={(event) => setCollectionFilter(event.target.value)}
+              aria-label="Filter by collection"
+            >
+              <option value="all">All collections</option>
+              <option value="none">Ungrouped</option>
+              {collections.map((collection) => (
+                <option key={collection.id} value={collection.id}>
+                  {collection.name}
+                </option>
+              ))}
+            </select>
             <Button
               variant={view === "active" ? "default" : "outline"}
               onClick={() => setView("active")}
@@ -263,6 +349,19 @@ export function TrackedTabsPanel() {
           </div>
         </CardContent>
       </Card>
+      {unhealthyCount > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TriangleAlert className="size-4" />
+              {unhealthyCount} activit{unhealthyCount === 1 ? "y needs" : "ies need"} attention
+            </CardTitle>
+            <CardDescription>
+              Stale activities and offline owners show recovery actions on each card.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
       {selectedVisibleIds.length > 0 ? (
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 pt-6">
@@ -280,6 +379,10 @@ export function TrackedTabsPanel() {
             <Button variant="outline" onClick={() => setBulkTagsOpen(true)}>
               <Tags data-icon="inline-start" />
               Tag
+            </Button>
+            <Button variant="outline" onClick={() => setBulkMoveOpen(true)}>
+              <FolderInput data-icon="inline-start" />
+              Move
             </Button>
             <Button
               variant="destructive"
@@ -358,12 +461,25 @@ export function TrackedTabsPanel() {
                       ))}
                     </div>
                   ) : null}
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {tab.collection ? <Badge variant="secondary">{tab.collection.name}</Badge> : null}
+                    {tab.isPrivate ? (
+                      <Badge variant="outline">
+                        <Lock className="size-3" />
+                        Private
+                      </Badge>
+                    ) : null}
+                    {tab.health.stale ? <Badge variant="destructive">Stale</Badge> : null}
+                    {tab.health.ownerOffline ? (
+                      <Badge variant="destructive">Owner offline</Badge>
+                    ) : null}
+                  </div>
                 </div>
               </div>
               <CardAction>
                 {tab.activeDevice ? (
                   <Badge
-                    variant="secondary"
+                    variant={tab.health.ownerOffline ? "destructive" : "secondary"}
                     className="max-w-[11rem]"
                     title={`Active · ${tab.activeDevice.name}`}
                   >
@@ -387,22 +503,49 @@ export function TrackedTabsPanel() {
                 Last updated from {tab.lastUpdatedDevice?.name ?? "unknown device"} ·{" "}
                 {relativeTime(tab.lastUpdatedAt)}
               </p>
+              {tab.health.ownershipConflict ? (
+                <p className="text-sm text-destructive">
+                  Ownership is stuck on an offline device. Release it so another device can take over.
+                </p>
+              ) : null}
             </CardContent>
             <CardFooter className="flex flex-wrap gap-2.5">
               <Button render={<a href={tab.currentUrl} target="_blank" rel="noreferrer" />}>
                 <ExternalLink data-icon="inline-start" />
                 Open
               </Button>
+              {tab.health.ownershipConflict ? (
+                <Button
+                  variant="secondary"
+                  disabled={releaseMutation.isPending}
+                  onClick={() => releaseMutation.mutate({ id: tab.id })}
+                >
+                  <Unplug data-icon="inline-start" />
+                  Release ownership
+                </Button>
+              ) : null}
+              {tab.health.stale && view === "active" ? (
+                <Button
+                  variant="outline"
+                  disabled={archiveMutation.isPending}
+                  onClick={() => archiveMutation.mutate({ id: tab.id })}
+                >
+                  <Archive data-icon="inline-start" />
+                  Archive stale
+                </Button>
+              ) : null}
               <Button
                 variant="secondary"
                 onClick={() => {
                   setEditingId(tab.id);
                   setEditName(tab.name);
                   setEditTags(tab.tags.join(", "));
+                  setEditCollectionId(tab.collectionId ?? "");
+                  setEditPrivate(tab.isPrivate);
                 }}
               >
                 <Pencil data-icon="inline-start" />
-                Rename
+                Edit
               </Button>
               <Button variant="outline" onClick={() => setHistoryTabId(tab.id)}>
                 <History data-icon="inline-start" />
@@ -451,9 +594,9 @@ export function TrackedTabsPanel() {
       <Dialog open={Boolean(editingId)} onOpenChange={(open) => !open && setEditingId(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename tracked tab</DialogTitle>
+            <DialogTitle>Edit activity</DialogTitle>
             <DialogDescription>
-              Give this activity a recognizable name and optional comma-separated tags.
+              Update the name, tags, collection, and private mode for this activity.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
@@ -471,6 +614,27 @@ export function TrackedTabsPanel() {
               onChange={(e) => setEditTags(e.target.value)}
               placeholder="research, work"
             />
+            <Label htmlFor="tracked-collection">Collection</Label>
+            <select
+              id="tracked-collection"
+              className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+              value={editCollectionId}
+              onChange={(event) => setEditCollectionId(event.target.value)}
+            >
+              <option value="">Ungrouped</option>
+              {collections.map((collection) => (
+                <option key={collection.id} value={collection.id}>
+                  {collection.name}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 pt-2 text-sm">
+              <Checkbox
+                checked={editPrivate}
+                onCheckedChange={(checked) => setEditPrivate(checked === true)}
+              />
+              Private mode (no navigation history)
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingId(null)}>
@@ -487,6 +651,8 @@ export function TrackedTabsPanel() {
                     .split(",")
                     .map((tag) => tag.trim())
                     .filter(Boolean),
+                  collectionId: editCollectionId || null,
+                  isPrivate: editPrivate,
                 });
               }}
             >
@@ -516,7 +682,8 @@ export function TrackedTabsPanel() {
               <div key={entry.id} className="flex flex-col gap-2 border border-border px-3 py-2">
                 <span className="font-medium">{entry.title || displayHostPath(entry.url)}</span>
                 <span className="text-muted-foreground">
-                  {displayHostPath(entry.url)} · {formatHistoryTime(entry.visitedAt)}
+                  <HistoryUrl url={entry.url} comparisonUrls={historyUrls} /> ·{" "}
+                  {formatHistoryTime(entry.visitedAt)}
                 </span>
                 <div className="flex gap-2">
                   <Button
@@ -588,6 +755,46 @@ export function TrackedTabsPanel() {
               }
             >
               Add tags
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkMoveOpen} onOpenChange={setBulkMoveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move selected activities</DialogTitle>
+            <DialogDescription>
+              Assign the selected activities to a collection, or leave them ungrouped.
+            </DialogDescription>
+          </DialogHeader>
+          <select
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+            value={bulkMoveCollectionId}
+            onChange={(event) => setBulkMoveCollectionId(event.target.value)}
+            aria-label="Destination collection"
+          >
+            <option value="">Ungrouped</option>
+            {collections.map((collection) => (
+              <option key={collection.id} value={collection.id}>
+                {collection.name}
+              </option>
+            ))}
+          </select>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkMoveOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={bulkMoveMutation.isPending || selectedVisibleIds.length === 0}
+              onClick={() =>
+                bulkMoveMutation.mutate({
+                  ids: selectedVisibleIds,
+                  collectionId: bulkMoveCollectionId || null,
+                })
+              }
+            >
+              Move
             </Button>
           </DialogFooter>
         </DialogContent>

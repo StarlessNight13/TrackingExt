@@ -4,12 +4,17 @@ import { db } from "@trackingext/db";
 import { userSettings } from "@trackingext/db/schema/tracked";
 import { eq } from "drizzle-orm";
 
+import { purgeExpiredHistoryForUser } from "../lib/history-retention";
 import { DASHBOARD_THEME_VARIANTS, getOrCreateSettings } from "../lib/settings";
 import { protectedProcedure } from "../index";
 
+const historyRetentionSchema = z.union([z.literal(7), z.literal(30), z.literal(90), z.null()]);
+
 export const settingsRouter = {
   get: protectedProcedure.handler(async ({ context }) => {
-    return getOrCreateSettings(context.session.user.id);
+    const userId = context.session.user.id;
+    await purgeExpiredHistoryForUser(userId);
+    return getOrCreateSettings(userId);
   }),
 
   update: protectedProcedure
@@ -21,6 +26,7 @@ export const settingsRouter = {
         excludedHosts: z.array(z.string().min(1).max(253)).max(200).optional(),
         dashboardThemeSeed: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         dashboardThemeVariant: z.enum(DASHBOARD_THEME_VARIANTS).optional(),
+        historyRetentionDays: historyRetentionSchema.optional(),
       }),
     )
     .handler(async ({ context, input }) => {
@@ -44,9 +50,20 @@ export const settingsRouter = {
           ...(input.dashboardThemeVariant !== undefined
             ? { dashboardThemeVariant: input.dashboardThemeVariant }
             : {}),
+          ...(input.historyRetentionDays !== undefined
+            ? { historyRetentionDays: input.historyRetentionDays }
+            : {}),
         })
         .where(eq(userSettings.userId, userId));
 
+      if (input.historyRetentionDays !== undefined) {
+        await purgeExpiredHistoryForUser(userId);
+      }
+
       return getOrCreateSettings(userId);
     }),
+
+  purgeHistory: protectedProcedure.handler(async ({ context }) => {
+    return purgeExpiredHistoryForUser(context.session.user.id);
+  }),
 };

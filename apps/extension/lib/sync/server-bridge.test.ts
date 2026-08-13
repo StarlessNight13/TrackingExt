@@ -9,6 +9,8 @@ function tab(id: string, lastUpdatedAt: string, name = id): TrackedTab {
     name,
     emoji: null,
     tags: [],
+    collectionId: null,
+    collection: null,
     currentUrl: `https://example.com/${id}`,
     currentTitle: name,
     activeDeviceId: "dev-1",
@@ -16,6 +18,7 @@ function tab(id: string, lastUpdatedAt: string, name = id): TrackedTab {
     lastUpdatedAt,
     createdAt: lastUpdatedAt,
     archivedAt: null,
+    isPrivate: false,
     activeDevice: { id: "dev-1", name: "Device", browser: "Chrome" },
     lastUpdatedDevice: { id: "dev-1", name: "Device", browser: "Chrome" },
   };

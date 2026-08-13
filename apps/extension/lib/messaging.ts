@@ -21,6 +21,7 @@ export type PopupSnapshot = {
   } | null;
   trackedTabs: TrackedTab[];
   pendingReconnect: ReconnectCandidate[];
+  pendingSyncCount: number;
   settings: PrivacySettings;
 };
 

@@ -33,6 +33,7 @@ import { toast } from "sonner";
 
 import { relativeTime } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
+import { OFFLINE_DEVICE_MS } from "@trackingext/api/lib/settings.constants";
 
 export function DevicesPanel() {
   const queryClient = useQueryClient();
@@ -104,7 +105,9 @@ export function DevicesPanel() {
   return (
     <>
       <div className="flex flex-col gap-3">
-        {devices.map((device) => (
+        {devices.map((device) => {
+          const offline = Date.now() - new Date(device.lastSeenAt).getTime() > OFFLINE_DEVICE_MS;
+          return (
           <Card key={device.id}>
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
@@ -118,7 +121,12 @@ export function DevicesPanel() {
                     <CardDescription>Last seen {relativeTime(device.lastSeenAt)}</CardDescription>
                   </div>
                 </div>
-                <Badge variant="secondary">{device.browser}</Badge>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge variant="secondary">{device.browser}</Badge>
+                  <Badge variant={offline ? "destructive" : "outline"}>
+                    {offline ? "Offline" : "Online"}
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -157,7 +165,8 @@ export function DevicesPanel() {
               </Button>
             </CardFooter>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       <Dialog open={Boolean(editingId)} onOpenChange={(open) => !open && setEditingId(null)}>

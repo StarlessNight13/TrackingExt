@@ -22,6 +22,28 @@ export const device = sqliteTable(
   (table) => [index("device_userId_idx").on(table.userId)],
 );
 
+export const collection = sqliteTable(
+  "collection",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    notes: text("notes").default("").notNull(),
+    /** Soft reference — validated in API so we avoid circular FKs. */
+    pinnedTrackedTabId: text("pinned_tracked_tab_id"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index("collection_userId_idx").on(table.userId)],
+);
+
 export const trackedTab = sqliteTable(
   "tracked_tab",
   {
@@ -29,6 +51,9 @@ export const trackedTab = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    collectionId: text("collection_id").references(() => collection.id, {
+      onDelete: "set null",
+    }),
     name: text("name").notNull(),
     emoji: text("emoji"),
     /** JSON array of user-defined labels, e.g. ["research","work"] */
@@ -48,11 +73,14 @@ export const trackedTab = sqliteTable(
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
     archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
+    /** When true, navigation history is never stored for this activity. */
+    isPrivate: integer("is_private", { mode: "boolean" }).default(false).notNull(),
   },
   (table) => [
     index("tracked_tab_userId_idx").on(table.userId),
     index("tracked_tab_activeDeviceId_idx").on(table.activeDeviceId),
     index("tracked_tab_archivedAt_idx").on(table.archivedAt),
+    index("tracked_tab_collectionId_idx").on(table.collectionId),
   ],
 );
 
@@ -83,6 +111,8 @@ export const userSettings = sqliteTable("user_settings", {
   dashboardThemeVariant: text("dashboard_theme_variant").default("TONAL_SPOT").notNull(),
   /** JSON array of hostnames, e.g. ["mail.google.com","bank.example"] */
   excludedHosts: text("excluded_hosts").default("[]").notNull(),
+  /** null = keep forever; otherwise 7 / 30 / 90 */
+  historyRetentionDays: integer("history_retention_days"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
     .$onUpdate(() => /* @__PURE__ */ new Date())
@@ -98,10 +128,22 @@ export const deviceRelations = relations(device, ({ one, many }) => ({
   lastUpdatedTrackedTabs: many(trackedTab, { relationName: "lastUpdatedDevice" }),
 }));
 
+export const collectionRelations = relations(collection, ({ one, many }) => ({
+  user: one(user, {
+    fields: [collection.userId],
+    references: [user.id],
+  }),
+  trackedTabs: many(trackedTab),
+}));
+
 export const trackedTabRelations = relations(trackedTab, ({ one, many }) => ({
   user: one(user, {
     fields: [trackedTab.userId],
     references: [user.id],
+  }),
+  collection: one(collection, {
+    fields: [trackedTab.collectionId],
+    references: [collection.id],
   }),
   activeDevice: one(device, {
     fields: [trackedTab.activeDeviceId],

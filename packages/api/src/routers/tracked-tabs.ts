@@ -3,10 +3,13 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import { db } from "@trackingext/db";
-import { device, trackedTab, trackedTabHistory } from "@trackingext/db/schema/tracked";
+import { collection, device, trackedTab, trackedTabHistory } from "@trackingext/db/schema/tracked";
 
+import { purgeExpiredHistoryForUser } from "../lib/history-retention";
 import { createId } from "../lib/ids";
 import { getOrCreateSettings } from "../lib/settings";
+import { OFFLINE_DEVICE_MS, STALE_ACTIVITY_MS } from "../lib/settings.constants";
+import { hasSameHostname } from "../lib/url-pattern";
 import { protectedProcedure } from "../index";
 
 function serializeDevice(row: typeof device.$inferSelect | null | undefined) {
@@ -15,6 +18,7 @@ function serializeDevice(row: typeof device.$inferSelect | null | undefined) {
     id: row.id,
     name: row.name,
     browser: row.browser,
+    lastSeenAt: row.lastSeenAt.toISOString(),
   };
 }
 
@@ -22,13 +26,26 @@ function serializeTab(
   row: typeof trackedTab.$inferSelect & {
     activeDevice?: typeof device.$inferSelect | null;
     lastUpdatedDevice?: typeof device.$inferSelect | null;
+    collection?: typeof collection.$inferSelect | null;
   },
 ) {
+  const now = Date.now();
+  const lastUpdatedAtMs = row.lastUpdatedAt.getTime();
+  const activeLastSeenMs = row.activeDevice?.lastSeenAt.getTime() ?? null;
+  const stale = !row.archivedAt && now - lastUpdatedAtMs > STALE_ACTIVITY_MS;
+  const ownerOffline =
+    Boolean(row.activeDeviceId) &&
+    activeLastSeenMs != null &&
+    now - activeLastSeenMs > OFFLINE_DEVICE_MS;
+  const ownershipConflict = ownerOffline;
+
   return {
     id: row.id,
     name: row.name,
     emoji: row.emoji,
     tags: parseTags(row.tags),
+    collectionId: row.collectionId,
+    collection: row.collection ? { id: row.collection.id, name: row.collection.name } : null,
     currentUrl: row.currentUrl,
     currentTitle: row.currentTitle,
     activeDeviceId: row.activeDeviceId,
@@ -36,8 +53,19 @@ function serializeTab(
     lastUpdatedAt: row.lastUpdatedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     archivedAt: row.archivedAt?.toISOString() ?? null,
+    isPrivate: row.isPrivate,
     activeDevice: serializeDevice(row.activeDevice),
     lastUpdatedDevice: serializeDevice(row.lastUpdatedDevice),
+    health: {
+      stale,
+      ownerOffline,
+      ownershipConflict,
+      issues: [
+        ...(stale ? (["stale"] as const) : []),
+        ...(ownerOffline ? (["owner_offline"] as const) : []),
+        ...(ownershipConflict ? (["ownership_conflict"] as const) : []),
+      ],
+    },
   };
 }
 
@@ -65,6 +93,7 @@ async function requireOwnedTab(userId: string, tabId: string) {
     with: {
       activeDevice: true,
       lastUpdatedDevice: true,
+      collection: true,
     },
   });
   if (!tab) {
@@ -83,10 +112,34 @@ async function requireOwnedDevice(userId: string, deviceId: string) {
   return row;
 }
 
+async function requireOwnedCollection(userId: string, collectionId: string) {
+  const row = await db.query.collection.findFirst({
+    where: and(eq(collection.id, collectionId), eq(collection.userId, userId)),
+  });
+  if (!row) {
+    throw new ORPCError("BAD_REQUEST", { message: "Unknown collection" });
+  }
+  return row;
+}
+
+function shouldRecordHistory(settings: { recordHistory: boolean }, isPrivate: boolean) {
+  return settings.recordHistory && !isPrivate;
+}
+
 export const trackedTabsRouter = {
   list: protectedProcedure
-    .input(z.object({ archived: z.enum(["active", "archived", "all"]).optional() }).optional())
+    .input(
+      z
+        .object({
+          archived: z.enum(["active", "archived", "all"]).optional(),
+          collectionId: z.string().min(1).nullable().optional(),
+        })
+        .optional(),
+    )
     .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      await purgeExpiredHistoryForUser(userId);
+
       const archived = input?.archived ?? "active";
       const archivedFilter =
         archived === "active"
@@ -94,13 +147,19 @@ export const trackedTabsRouter = {
           : archived === "archived"
             ? isNotNull(trackedTab.archivedAt)
             : undefined;
+      const collectionFilter =
+        input?.collectionId === undefined
+          ? undefined
+          : input.collectionId === null
+            ? isNull(trackedTab.collectionId)
+            : eq(trackedTab.collectionId, input.collectionId);
+
       const rows = await db.query.trackedTab.findMany({
-        where: archivedFilter
-          ? and(eq(trackedTab.userId, context.session.user.id), archivedFilter)
-          : eq(trackedTab.userId, context.session.user.id),
+        where: and(eq(trackedTab.userId, userId), archivedFilter, collectionFilter),
         with: {
           activeDevice: true,
           lastUpdatedDevice: true,
+          collection: true,
         },
         orderBy: [desc(trackedTab.lastUpdatedAt)],
       });
@@ -123,11 +182,16 @@ export const trackedTabsRouter = {
         tags: tagsSchema.optional(),
         url: z.string().url(),
         title: z.string().max(500).nullable().optional(),
+        collectionId: z.string().min(1).nullable().optional(),
+        isPrivate: z.boolean().optional(),
       }),
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireOwnedDevice(userId, input.deviceId);
+      if (input.collectionId) {
+        await requireOwnedCollection(userId, input.collectionId);
+      }
 
       const settings = await getOrCreateSettings(userId);
       const host = new URL(input.url).hostname;
@@ -139,9 +203,11 @@ export const trackedTabsRouter = {
 
       const now = new Date();
       const id = createId("tab");
+      const isPrivate = input.isPrivate ?? false;
       await db.insert(trackedTab).values({
         id,
         userId,
+        collectionId: input.collectionId ?? null,
         name: input.name,
         emoji: input.emoji ?? null,
         tags: JSON.stringify(input.tags ?? []),
@@ -150,9 +216,10 @@ export const trackedTabsRouter = {
         activeDeviceId: input.deviceId,
         lastUpdatedDeviceId: input.deviceId,
         lastUpdatedAt: now,
+        isPrivate,
       });
 
-      if (settings.recordHistory) {
+      if (shouldRecordHistory(settings, isPrivate)) {
         await db.insert(trackedTabHistory).values({
           id: createId("hist"),
           trackedTabId: id,
@@ -175,20 +242,42 @@ export const trackedTabsRouter = {
         name: z.string().min(1).max(120),
         emoji: z.string().max(8).nullable().optional(),
         tags: tagsSchema.optional(),
+        collectionId: z.string().min(1).nullable().optional(),
+        isPrivate: z.boolean().optional(),
       }),
     )
     .handler(async ({ context, input }) => {
-      await requireOwnedTab(context.session.user.id, input.id);
+      const userId = context.session.user.id;
+      await requireOwnedTab(userId, input.id);
+      if (input.collectionId) {
+        await requireOwnedCollection(userId, input.collectionId);
+      }
       await db
         .update(trackedTab)
         .set({
           name: input.name,
           ...(input.emoji !== undefined ? { emoji: input.emoji } : {}),
           ...(input.tags !== undefined ? { tags: JSON.stringify(input.tags) } : {}),
+          ...(input.collectionId !== undefined ? { collectionId: input.collectionId } : {}),
+          ...(input.isPrivate !== undefined ? { isPrivate: input.isPrivate } : {}),
         })
         .where(eq(trackedTab.id, input.id));
-      const tab = await requireOwnedTab(context.session.user.id, input.id);
+      const tab = await requireOwnedTab(userId, input.id);
       return serializeTab(tab);
+    }),
+
+  setPrivate: protectedProcedure
+    .input(z.object({ id: z.string().min(1), isPrivate: z.boolean() }))
+    .handler(async ({ context, input }) => {
+      await requireOwnedTab(context.session.user.id, input.id);
+      await db
+        .update(trackedTab)
+        .set({ isPrivate: input.isPrivate })
+        .where(eq(trackedTab.id, input.id));
+      if (input.isPrivate) {
+        await db.delete(trackedTabHistory).where(eq(trackedTabHistory.trackedTabId, input.id));
+      }
+      return serializeTab(await requireOwnedTab(context.session.user.id, input.id));
     }),
 
   archive: protectedProcedure
@@ -257,6 +346,25 @@ export const trackedTabsRouter = {
       return { ok: true as const };
     }),
 
+  bulkMove: protectedProcedure
+    .input(
+      z.object({
+        ids: tabIdsSchema,
+        collectionId: z.string().min(1).nullable(),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      if (input.collectionId) {
+        await requireOwnedCollection(userId, input.collectionId);
+      }
+      await db
+        .update(trackedTab)
+        .set({ collectionId: input.collectionId })
+        .where(and(eq(trackedTab.userId, userId), inArray(trackedTab.id, input.ids)));
+      return { ok: true as const };
+    }),
+
   /**
    * Push a URL/title update from the active device.
    * Rejects if another device currently owns the tracked tab (use takeOver).
@@ -302,6 +410,14 @@ export const trackedTabsRouter = {
         };
       }
 
+      if (!hasSameHostname(tab.currentUrl, input.url)) {
+        return {
+          skipped: true as const,
+          reason: "different_domain" as const,
+          tab: serializeTab(tab),
+        };
+      }
+
       const now = new Date();
       const urlChanged = tab.currentUrl !== input.url;
 
@@ -316,7 +432,7 @@ export const trackedTabsRouter = {
         })
         .where(eq(trackedTab.id, input.id));
 
-      if (settings.recordHistory && urlChanged) {
+      if (shouldRecordHistory(settings, tab.isPrivate) && urlChanged) {
         await db.insert(trackedTabHistory).values({
           id: createId("hist"),
           trackedTabId: input.id,
@@ -367,13 +483,13 @@ export const trackedTabsRouter = {
     .input(
       z.object({
         id: z.string().min(1),
-        deviceId: z.string().min(1),
+        deviceId: z.string().min(1).optional(),
       }),
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const tab = await requireOwnedTab(userId, input.id);
-      if (tab.activeDeviceId === input.deviceId) {
+      if (!input.deviceId || tab.activeDeviceId === input.deviceId) {
         await db
           .update(trackedTab)
           .set({ activeDeviceId: null })
@@ -400,7 +516,12 @@ export const trackedTabsRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
-      await requireOwnedTab(context.session.user.id, input.id);
+      const userId = context.session.user.id;
+      await purgeExpiredHistoryForUser(userId);
+      const tab = await requireOwnedTab(userId, input.id);
+      if (tab.isPrivate) {
+        return [];
+      }
       const rows = await db.query.trackedTabHistory.findMany({
         where: eq(trackedTabHistory.trackedTabId, input.id),
         orderBy: [desc(trackedTabHistory.visitedAt)],

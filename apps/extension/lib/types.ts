@@ -30,6 +30,7 @@ export type PrivacySettings = {
   excludedHosts: string[];
   dashboardThemeSeed: string;
   dashboardThemeVariant: DashboardThemeVariant;
+  historyRetentionDays: 7 | 30 | 90 | null;
 };
 
 export type DeviceInfo = {
@@ -45,6 +46,8 @@ export type TrackedTab = {
   name: string;
   emoji: string | null;
   tags: string[];
+  collectionId: string | null;
+  collection: { id: string; name: string } | null;
   currentUrl: string;
   currentTitle: string | null;
   activeDeviceId: string | null;
@@ -52,8 +55,15 @@ export type TrackedTab = {
   lastUpdatedAt: string;
   createdAt: string;
   archivedAt: string | null;
-  activeDevice: { id: string; name: string; browser: string } | null;
-  lastUpdatedDevice: { id: string; name: string; browser: string } | null;
+  isPrivate: boolean;
+  activeDevice: { id: string; name: string; browser: string; lastSeenAt?: string } | null;
+  lastUpdatedDevice: { id: string; name: string; browser: string; lastSeenAt?: string } | null;
+  health?: {
+    stale: boolean;
+    ownerOffline: boolean;
+    ownershipConflict: boolean;
+    issues: Array<"stale" | "owner_offline" | "ownership_conflict">;
+  };
 };
 
 export type QueuedLocationUpdate = {
@@ -106,6 +116,7 @@ export const DEFAULT_SETTINGS: PrivacySettings = {
   excludedHosts: [],
   dashboardThemeSeed: DEFAULT_DASHBOARD_THEME_SEED,
   dashboardThemeVariant: DEFAULT_DASHBOARD_THEME_VARIANT,
+  historyRetentionDays: null,
 };
 
 export const DEFAULT_LOCAL_STATE: LocalState = {

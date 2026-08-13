@@ -469,6 +469,12 @@ function MainView({
           <span className="pill">{describeSyncModes(snapshot.syncModes)}</span>
           {lanSummary ? <span className="muted">{lanSummary}</span> : null}
         </div>
+        {snapshot.pendingSyncCount > 0 ? (
+          <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+            {snapshot.pendingSyncCount} queued update
+            {snapshot.pendingSyncCount === 1 ? "" : "s"} waiting to sync.
+          </p>
+        ) : null}
         <button
           className="btn secondary"
           type="button"
@@ -481,7 +487,7 @@ function MainView({
             })
           }
         >
-          Sync now
+          {snapshot.pendingSyncCount > 0 ? "Retry sync" : "Sync now"}
         </button>
       </div>
 

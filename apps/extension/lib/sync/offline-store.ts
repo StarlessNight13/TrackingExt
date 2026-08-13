@@ -34,6 +34,8 @@ export async function createOfflineTab(input: {
     name: input.name,
     emoji: input.emoji ?? null,
     tags: [],
+    collectionId: null,
+    collection: null,
     currentUrl: input.url,
     currentTitle: input.title ?? null,
     activeDeviceId: input.deviceId,
@@ -41,13 +43,14 @@ export async function createOfflineTab(input: {
     lastUpdatedAt: now,
     createdAt: now,
     archivedAt: null,
+    isPrivate: false,
     activeDevice: buildLocalDeviceRef(input.deviceId, input.deviceName),
     lastUpdatedDevice: buildLocalDeviceRef(input.deviceId, input.deviceName),
   };
 
   const state = await getLocalState();
   const history = { ...state.localHistory };
-  if (state.settings.recordHistory) {
+  if (state.settings.recordHistory && !tab.isPrivate) {
     const entries = history[tab.id] ?? [];
     history[tab.id] = [
       {
@@ -97,7 +100,7 @@ export async function updateOfflineTabLocation(input: {
   };
 
   const history = { ...state.localHistory };
-  if (state.settings.recordHistory && urlChanged) {
+  if (state.settings.recordHistory && !tab.isPrivate && urlChanged) {
     const entries = history[input.tabId] ?? [];
     history[input.tabId] = [
       {
