@@ -55,7 +55,7 @@ function BrowserCard({
   icon: Icon,
 }: BrowserCardProps) {
   return (
-    <Card variant="outlined" className="overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader className="gap-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">

@@ -388,7 +388,7 @@ export function TrackedTabsPanel() {
         </CardContent>
       </Card>
       {unhealthyCount > 0 ? (
-        <Card variant="outlined">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <TriangleAlert className="size-4" />

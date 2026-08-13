@@ -84,7 +84,7 @@ export function SettingsPanel() {
         </AlertDescription>
       </Alert>
 
-      <Card variant="filled">
+      <Card>
         <CardHeader>
           <CardTitle>Dashboard theme</CardTitle>
           <CardDescription>
@@ -93,7 +93,10 @@ export function SettingsPanel() {
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="dashboard-theme-seed">Seed color</Label>
+            <Label htmlFor="dashboard-theme-seed">Source color</Label>
+            <p className="text-sm text-muted-foreground">
+              This stays fixed while you choose a palette style below.
+            </p>
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative size-12 overflow-hidden rounded-full border border-border">
                 <input
@@ -106,16 +109,19 @@ export function SettingsPanel() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {THEME_SWATCHES.map((swatch) => (
-                  <button
+                  <Button
                     key={swatch}
                     type="button"
+                    variant="outline"
+                    size="icon"
                     aria-label={`Use ${swatch} as dashboard theme color`}
+                    aria-pressed={themeSeed.toUpperCase() === swatch}
                     onClick={() => setThemeSeed(swatch)}
-                    className="size-8 rounded-full border border-border"
+                    className="dashboard-theme-swatch size-8"
                     style={{ backgroundColor: swatch }}
                   >
                     <span className="sr-only">{swatch}</span>
-                  </button>
+                  </Button>
                 ))}
               </div>
               <Badge variant="secondary">
@@ -126,14 +132,20 @@ export function SettingsPanel() {
           </div>
 
           <div className="flex flex-col gap-3">
-            <Label>Theme variant</Label>
+            <Label>Palette style</Label>
+            <p className="text-sm text-muted-foreground">
+              Controls how Material derives colors from the source color; it does not replace it.
+            </p>
             <div className="flex flex-wrap gap-2">
               {DASHBOARD_THEME_VARIANTS.map((variant) => (
                 <Button
                   key={variant}
                   type="button"
-                  variant={themeVariant === variant ? "default" : "secondary"}
+                  variant="outline"
                   size="sm"
+                  className="dashboard-theme-variant"
+                  aria-pressed={themeVariant === variant}
+                  data-active={themeVariant === variant || undefined}
                   onClick={() => setThemeVariant(variant)}
                 >
                   {VARIANT_LABELS[variant]}
@@ -157,7 +169,7 @@ export function SettingsPanel() {
         </CardFooter>
       </Card>
 
-      <Card variant="filled">
+      <Card>
         <CardHeader>
           <CardTitle>Sync preferences</CardTitle>
           <CardDescription>Control what gets stored for tracked activities.</CardDescription>
@@ -210,7 +222,7 @@ export function SettingsPanel() {
         </CardContent>
       </Card>
 
-      <Card variant="filled">
+      <Card>
         <CardHeader>
           <CardTitle>History retention</CardTitle>
           <CardDescription>
@@ -241,7 +253,7 @@ export function SettingsPanel() {
         </CardContent>
       </Card>
 
-      <Card variant="filled">
+      <Card>
         <CardHeader>
           <CardTitle>Excluded websites</CardTitle>
           <CardDescription>
