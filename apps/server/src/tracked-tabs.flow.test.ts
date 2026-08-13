@@ -177,4 +177,43 @@ describe("tracked tabs API flow", () => {
     });
     expect(archivedList.json.json.map((tab) => tab.id)).toContain(created.json.json.id);
   });
+
+  it("applies bulk tags and archives only the caller's selected activities", async () => {
+    const token = await signUp();
+    const device = await rpc<{ json: { id: string } }>(token, "devices/register", {
+      name: "Home PC · Firefox",
+      browser: "Firefox",
+    });
+    const create = (name: string) =>
+      rpc<{ json: { id: string } }>(token, "trackedTabs/create", {
+        deviceId: device.json.json.id,
+        name,
+        url: `https://example.com/${name}`,
+      });
+    const [first, second] = await Promise.all([create("first"), create("second")]);
+    const ids = [first.json.json.id, second.json.json.id];
+
+    const tagged = await rpc<{ json: { ok: boolean } }>(token, "trackedTabs/bulkTag", {
+      ids,
+      tags: ["reading"],
+      mode: "add",
+    });
+    expect(tagged.json.json.ok).toBe(true);
+
+    const all = await rpc<{ json: Array<{ id: string; tags: string[] }> }>(
+      token,
+      "trackedTabs/list",
+      { archived: "all" },
+    );
+    expect(
+      all.json.json
+        .filter((tab) => ids.includes(tab.id))
+        .every((tab) => tab.tags.includes("reading")),
+    ).toBe(true);
+
+    const archived = await rpc<{ json: { ok: boolean } }>(token, "trackedTabs/bulkArchive", {
+      ids,
+    });
+    expect(archived.json.json.ok).toBe(true);
+  });
 });
