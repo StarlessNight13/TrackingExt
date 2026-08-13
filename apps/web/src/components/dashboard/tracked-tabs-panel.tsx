@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@trackingext/ui/components/card";
+import { Checkbox } from "@trackingext/ui/components/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -36,10 +37,12 @@ import {
   ExternalLink,
   History,
   Pencil,
+  Play,
   Search,
+  Tags,
   Trash2,
 } from "lucide-react";
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { displayHostPath, relativeTime } from "@/lib/format";
@@ -52,6 +55,12 @@ type HistoryEntry = {
   visitedAt: string;
 };
 
+function formatHistoryTime(iso: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+    new Date(iso),
+  );
+}
+
 export function TrackedTabsPanel() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<"active" | "archived">("active");
@@ -61,6 +70,10 @@ export function TrackedTabsPanel() {
   const [editTags, setEditTags] = useState("");
   const [historyTabId, setHistoryTabId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkTagsOpen, setBulkTagsOpen] = useState(false);
+  const [bulkTags, setBulkTags] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase());
 
   const renameMutation = useMutation({
@@ -96,6 +109,38 @@ export function TrackedTabsPanel() {
     onSuccess: async () => {
       await queryClient.invalidateQueries();
       toast.success("Activity restored");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const bulkArchiveMutation = useMutation({
+    ...orpc.trackedTabs.bulkArchive.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      setSelectedIds(new Set());
+      toast.success("Activities archived");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    ...orpc.trackedTabs.bulkDelete.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      setSelectedIds(new Set());
+      toast.success("Activities deleted");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const bulkTagMutation = useMutation({
+    ...orpc.trackedTabs.bulkTag.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      setSelectedIds(new Set());
+      setBulkTagsOpen(false);
+      setBulkTags("");
+      toast.success("Tags added");
     },
     onError: (error) => toast.error(error.message),
   });
@@ -150,6 +195,25 @@ export function TrackedTabsPanel() {
       .toLocaleLowerCase();
     return searchable.includes(deferredSearch);
   });
+  const selectedVisibleIds = tabs.filter((tab) => selectedIds.has(tab.id)).map((tab) => tab.id);
+  const historyEntries = useMemo(() => {
+    const query = historySearch.trim().toLocaleLowerCase();
+    const entries = (historyQuery.data as HistoryEntry[] | undefined) ?? [];
+    return query
+      ? entries.filter((entry) =>
+          `${entry.title ?? ""} ${entry.url}`.toLocaleLowerCase().includes(query),
+        )
+      : entries;
+  }, [historyQuery.data, historySearch]);
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
 
   return (
     <>
@@ -180,6 +244,46 @@ export function TrackedTabsPanel() {
           </div>
         </CardContent>
       </Card>
+      {selectedVisibleIds.length > 0 ? (
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 pt-6">
+            <p className="mr-auto text-sm font-medium">{selectedVisibleIds.length} selected</p>
+            {view === "active" ? (
+              <Button
+                variant="outline"
+                disabled={bulkArchiveMutation.isPending}
+                onClick={() => bulkArchiveMutation.mutate({ ids: selectedVisibleIds })}
+              >
+                <Archive data-icon="inline-start" />
+                Archive
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => setBulkTagsOpen(true)}>
+              <Tags data-icon="inline-start" />
+              Tag
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={bulkDeleteMutation.isPending}
+              onClick={() => {
+                if (
+                  confirm(
+                    `Delete ${selectedVisibleIds.length} selected activities and their history?`,
+                  )
+                ) {
+                  bulkDeleteMutation.mutate({ ids: selectedVisibleIds });
+                }
+              }}
+            >
+              <Trash2 data-icon="inline-start" />
+              Delete
+            </Button>
+            <Button variant="ghost" onClick={() => setSelectedIds(new Set())}>
+              Clear
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
       {tabs.length === 0 ? (
         <Empty className="border border-dashed">
           <EmptyHeader>
@@ -206,6 +310,11 @@ export function TrackedTabsPanel() {
           <Card key={tab.id}>
             <CardHeader className="gap-2">
               <div className="col-start-1 flex min-w-0 items-start gap-3">
+                <Checkbox
+                  checked={selectedIds.has(tab.id)}
+                  onCheckedChange={(checked) => toggleSelected(tab.id, checked === true)}
+                  aria-label={`Select ${tab.name}`}
+                />
                 <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
                   {tab.emoji ? (
                     <span className="text-lg">{tab.emoji}</span>
@@ -372,23 +481,40 @@ export function TrackedTabsPanel() {
               Locations visited while this tab was tracked. Only explicit tracking is stored.
             </DialogDescription>
           </DialogHeader>
+          <Input
+            value={historySearch}
+            onChange={(event) => setHistorySearch(event.target.value)}
+            placeholder="Search this activity’s history"
+            aria-label="Search activity history"
+          />
           <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
             {historyQuery.isLoading ? <Skeleton className="h-20 w-full" /> : null}
-            {(historyQuery.data as HistoryEntry[] | undefined)?.map((entry) => (
-              <a
-                key={entry.id}
-                href={entry.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex flex-col gap-0.5 border border-border px-3 py-2 hover:bg-muted"
-              >
+            {historyEntries.map((entry) => (
+              <div key={entry.id} className="flex flex-col gap-2 border border-border px-3 py-2">
                 <span className="font-medium">{entry.title || displayHostPath(entry.url)}</span>
                 <span className="text-muted-foreground">
-                  {displayHostPath(entry.url)} · {relativeTime(entry.visitedAt)}
+                  {displayHostPath(entry.url)} · {formatHistoryTime(entry.visitedAt)}
                 </span>
-              </a>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    render={<a href={entry.url} target="_blank" rel="noreferrer" />}
+                  >
+                    <ExternalLink data-icon="inline-start" />
+                    Open
+                  </Button>
+                  <Button
+                    size="sm"
+                    render={<a href={entry.url} target="_blank" rel="noreferrer" />}
+                  >
+                    <Play data-icon="inline-start" />
+                    Resume here
+                  </Button>
+                </div>
+              </div>
             ))}
-            {!historyQuery.isLoading && (historyQuery.data?.length ?? 0) === 0 ? (
+            {!historyQuery.isLoading && historyEntries.length === 0 ? (
               <p className="text-muted-foreground">No history recorded for this activity.</p>
             ) : null}
           </div>
@@ -402,6 +528,43 @@ export function TrackedTabsPanel() {
               }}
             >
               Clear history
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkTagsOpen} onOpenChange={setBulkTagsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add tags to selected activities</DialogTitle>
+            <DialogDescription>
+              Use commas to separate tags. Existing tags will be kept.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={bulkTags}
+            onChange={(event) => setBulkTags(event.target.value)}
+            placeholder="research, later"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkTagsOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!bulkTags.trim() || bulkTagMutation.isPending}
+              onClick={() =>
+                bulkTagMutation.mutate({
+                  ids: selectedVisibleIds,
+                  tags: bulkTags
+                    .split(",")
+                    .map((tag) => tag.trim())
+                    .filter(Boolean),
+                  mode: "add",
+                })
+              }
+            >
+              Add tags
             </Button>
           </DialogFooter>
         </DialogContent>

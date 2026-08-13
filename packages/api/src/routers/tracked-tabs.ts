@@ -216,7 +216,9 @@ export const trackedTabsRouter = {
       await db
         .update(trackedTab)
         .set({ archivedAt: new Date(), activeDeviceId: null })
-        .where(and(eq(trackedTab.userId, context.session.user.id), inArray(trackedTab.id, input.ids)));
+        .where(
+          and(eq(trackedTab.userId, context.session.user.id), inArray(trackedTab.id, input.ids)),
+        );
       return { ok: true as const };
     }),
 
@@ -225,7 +227,9 @@ export const trackedTabsRouter = {
     .handler(async ({ context, input }) => {
       await db
         .delete(trackedTab)
-        .where(and(eq(trackedTab.userId, context.session.user.id), inArray(trackedTab.id, input.ids)));
+        .where(
+          and(eq(trackedTab.userId, context.session.user.id), inArray(trackedTab.id, input.ids)),
+        );
       return { ok: true as const };
     }),
 
@@ -233,7 +237,10 @@ export const trackedTabsRouter = {
     .input(z.object({ ids: tabIdsSchema, tags: tagsSchema, mode: z.enum(["add", "replace"]) }))
     .handler(async ({ context, input }) => {
       const rows = await db.query.trackedTab.findMany({
-        where: and(eq(trackedTab.userId, context.session.user.id), inArray(trackedTab.id, input.ids)),
+        where: and(
+          eq(trackedTab.userId, context.session.user.id),
+          inArray(trackedTab.id, input.ids),
+        ),
       });
       await Promise.all(
         rows.map((row) => {
@@ -241,7 +248,10 @@ export const trackedTabsRouter = {
             input.mode === "replace"
               ? input.tags
               : [...new Set([...parseTags(row.tags), ...input.tags])];
-          return db.update(trackedTab).set({ tags: JSON.stringify(tags) }).where(eq(trackedTab.id, row.id));
+          return db
+            .update(trackedTab)
+            .set({ tags: JSON.stringify(tags) })
+            .where(eq(trackedTab.id, row.id));
         }),
       );
       return { ok: true as const };
