@@ -1,0 +1,259 @@
+import type { WriteResult } from "../core/conflicts";
+import type { TrackedTabRecord } from "../core/entities";
+import type { DatabaseClient, Statement } from "../db/client";
+import { tabFromRow, takeOverTrackedTab, updateTrackedTabLocation } from "../db/tracked-tabs";
+import { getCloudCredentials, setCloudStatus } from "../storage/cloud-configuration";
+import { setLocalState } from "../lib/storage";
+import { getLocalState } from "../lib/storage";
+import { withDatabaseClient } from "../services/database-service";
+import {
+  applyPulledTabs,
+  compactLocalDatabase,
+  deferOperation,
+  getTabsCursor,
+  listPendingOperations,
+  putCachedTab,
+  removeOperation,
+  storeConflict,
+  type OutboxOperation,
+} from "../storage/indexed-db";
+
+async function applyConditionalMutation(
+  client: DatabaseClient,
+  operation: OutboxOperation,
+  workspaceId: string,
+  deviceId: string,
+): Promise<WriteResult<TrackedTabRecord>> {
+  if (operation.kind === "update_location") {
+    return updateTrackedTabLocation(client, {
+      operationId: operation.operationId,
+      workspaceId,
+      tabId: operation.entityId,
+      deviceId,
+      baseRevision: operation.baseRevision ?? 0,
+      url: String(operation.payload.url),
+      title: operation.payload.title == null ? null : String(operation.payload.title),
+      recordHistory: operation.payload.recordHistory !== false,
+      now: operation.createdAt,
+    });
+  }
+  if (operation.kind === "takeover") {
+    return takeOverTrackedTab(client, {
+      operationId: operation.operationId,
+      workspaceId,
+      tabId: operation.entityId,
+      deviceId,
+      now: operation.createdAt,
+    });
+  }
+
+  const receipt = await client.execute({
+    sql: "SELECT 1 FROM mutation_receipt WHERE operation_id = ? AND workspace_id = ?",
+    args: [operation.operationId, workspaceId],
+  });
+  if (receipt.rows.length) {
+    const row = await client.execute({
+      sql: "SELECT * FROM tracked_tab WHERE id = ? AND workspace_id = ?",
+      args: [operation.entityId, workspaceId],
+    });
+    return row.rows[0]
+      ? { ok: true, value: tabFromRow(row.rows[0]) }
+      : { ok: false, reason: "missing", current: null };
+  }
+
+  let mutation: Statement;
+  let receiptCheck: Statement;
+  if (operation.kind === "create") {
+    const tab = operation.payload as unknown as TrackedTabRecord;
+    mutation = {
+      sql: `INSERT OR IGNORE INTO tracked_tab
+        (id, workspace_id, group_id, name, emoji, tags, current_url, current_title,
+         active_device_id, last_updated_device_id, is_private, archived_at, revision,
+         created_at, updated_at, deleted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        tab.id,
+        workspaceId,
+        tab.groupId,
+        tab.name,
+        tab.emoji,
+        tab.tags,
+        tab.currentUrl,
+        tab.currentTitle,
+        deviceId,
+        deviceId,
+        tab.isPrivate,
+        tab.archivedAt,
+        tab.revision,
+        tab.createdAt,
+        tab.updatedAt,
+        tab.deletedAt,
+      ],
+    };
+    receiptCheck = {
+      sql: "SELECT 1 FROM tracked_tab WHERE id = ? AND workspace_id = ? AND created_at = ?",
+      args: [tab.id, workspaceId, tab.createdAt],
+    };
+  } else if (operation.kind === "rename") {
+    mutation = {
+      sql: `UPDATE tracked_tab SET name = ?, emoji = ?, tags = ?, updated_at = ?, revision = revision + 1
+        WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at IS NULL`,
+      args: [
+        String(operation.payload.name),
+        operation.payload.emoji == null ? null : String(operation.payload.emoji),
+        JSON.stringify(operation.payload.tags ?? []),
+        operation.createdAt,
+        operation.entityId,
+        workspaceId,
+        operation.baseRevision ?? 0,
+      ],
+    };
+    receiptCheck = {
+      sql: "SELECT 1 FROM tracked_tab WHERE id = ? AND workspace_id = ? AND revision = ? AND updated_at = ?",
+      args: [operation.entityId, workspaceId, (operation.baseRevision ?? 0) + 1, operation.createdAt],
+    };
+  } else {
+    mutation = {
+      sql: `UPDATE tracked_tab SET deleted_at = ?, active_device_id = NULL,
+        updated_at = ?, revision = revision + 1
+        WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at IS NULL`,
+      args: [
+        operation.createdAt,
+        operation.createdAt,
+        operation.entityId,
+        workspaceId,
+        operation.baseRevision ?? 0,
+      ],
+    };
+    receiptCheck = {
+      sql: "SELECT 1 FROM tracked_tab WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at = ?",
+      args: [operation.entityId, workspaceId, (operation.baseRevision ?? 0) + 1, operation.createdAt],
+    };
+  }
+  const [changed] = await client.batch(
+    [
+      mutation,
+      {
+        sql: `INSERT INTO mutation_receipt (operation_id, workspace_id, entity_type, entity_id, applied_at)
+          SELECT ?, ?, 'tab', ?, ? WHERE EXISTS (${receiptCheck.sql})`,
+        args: [
+          operation.operationId,
+          workspaceId,
+          operation.entityId,
+          Date.now(),
+          ...((receiptCheck.args ?? []) as never[]),
+        ],
+      },
+    ],
+    "write",
+  );
+  if (changed?.rowsAffected !== 1) {
+    const result = await client.execute({
+      sql: "SELECT * FROM tracked_tab WHERE id = ? AND workspace_id = ?",
+      args: [operation.entityId, workspaceId],
+    });
+    const current = result.rows[0] ? tabFromRow(result.rows[0]) : null;
+    return {
+      ok: false,
+      reason: current?.deletedAt ? "deleted" : current ? "stale_revision" : "missing",
+      current,
+    };
+  }
+  const row = await client.execute({
+    sql: "SELECT * FROM tracked_tab WHERE id = ? AND workspace_id = ?",
+    args: [operation.entityId, workspaceId],
+  });
+  if (!row.rows[0]) return { ok: false, reason: "missing", current: null };
+  return { ok: true, value: tabFromRow(row.rows[0]) };
+}
+
+async function push(client: DatabaseClient, workspaceId: string, deviceId: string) {
+  const operations = await listPendingOperations();
+  const revisions = new Map<string, number>();
+  for (const operation of operations) {
+    try {
+      const effective = revisions.has(operation.entityId)
+        ? { ...operation, baseRevision: revisions.get(operation.entityId)! }
+        : operation;
+      const result = await applyConditionalMutation(client, effective, workspaceId, deviceId);
+      if (result.ok) {
+        revisions.set(operation.entityId, result.value.revision);
+        await putCachedTab(result.value);
+        await removeOperation(operation.operationId);
+      } else await storeConflict(operation, result);
+    } catch (error) {
+      await deferOperation(operation, error);
+      break;
+    }
+  }
+  return operations.length;
+}
+
+async function pull(client: DatabaseClient, workspaceId: string) {
+  const cursor = await getTabsCursor();
+  const result = await client.execute({
+    sql: `SELECT * FROM tracked_tab WHERE workspace_id = ?
+      AND (updated_at > ? OR (updated_at = ? AND id > ?))
+      ORDER BY updated_at, id LIMIT 500`,
+    args: [workspaceId, cursor.updatedAt, cursor.updatedAt, cursor.id],
+  });
+  const tabs = result.rows.map(tabFromRow);
+  const last = tabs.at(-1);
+  if (last) await applyPulledTabs(tabs, { updatedAt: last.updatedAt, id: last.id });
+  const settings = await client.execute({
+    sql: "SELECT * FROM workspace_settings WHERE workspace_id = ? AND deleted_at IS NULL",
+    args: [workspaceId],
+  });
+  const row = settings.rows[0];
+  if (row) {
+    await setLocalState({
+      settings: {
+        recordHistory: Boolean(row.record_history),
+        stripQueryParams: Boolean(row.strip_query_params),
+        stripFragments: Boolean(row.strip_fragments),
+        excludedHosts: JSON.parse(String(row.excluded_hosts)) as string[],
+        dashboardThemeSeed: String(row.dashboard_theme_seed),
+        dashboardThemeVariant: String(row.dashboard_theme_variant) as never,
+        historyRetentionDays: row.history_retention_days as 7 | 30 | 90 | null,
+      },
+    });
+  }
+  return tabs.length;
+}
+
+let syncing: Promise<{ pushed: number; pulled: number }> | undefined;
+
+export function syncCloudDatabase(options: { manual?: boolean } = {}) {
+  if (!syncing) {
+    syncing = (async () => {
+      const credentials = await getCloudCredentials();
+      const state = await getLocalState();
+      if (
+        !credentials ||
+        !state.syncModes.online ||
+        (!options.manual && !credentials.behavior.automaticSync)
+      )
+        return { pushed: 0, pulled: 0 };
+      await setCloudStatus({ state: "syncing", lastSyncAt: null, lastError: null });
+      try {
+        const result = await withDatabaseClient(credentials, "sync", async (client) => ({
+          pushed: await push(client, credentials.workspaceId, credentials.deviceId),
+          pulled: await pull(client, credentials.workspaceId),
+        }));
+        await compactLocalDatabase();
+        await setCloudStatus({ state: "idle", lastSyncAt: Date.now(), lastError: null });
+        return result;
+      } catch (error) {
+        await setCloudStatus({
+          state: "error",
+          lastSyncAt: null,
+          lastError: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    })().finally(() => {
+      syncing = undefined;
+    });
+  }
+  return syncing;
+}

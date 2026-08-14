@@ -1,0 +1,305 @@
+import { useEffect, useRef, useState, useTransition } from "react";
+
+import { sendMessage, type PopupSnapshot } from "../lib/messaging";
+import { M3Button } from "../entrypoints/popup/components/m3-button";
+import { M3SwitchRow } from "../entrypoints/popup/components/m3-switch";
+import { M3Select, M3TextField } from "../entrypoints/popup/components/m3-text-field";
+import { DEFAULT_DATABASE_BEHAVIOR, type DatabaseBehavior } from "../services/database-service";
+import type { DatabaseProvider } from "../services/database-service";
+import type { DatabaseLog } from "../storage/indexed-db";
+
+async function requestCloudConsent() {
+  const permissions = (await browser.permissions.getAll()) as { data_collection?: string[] };
+  if (!permissions.data_collection) return true;
+  if (
+    ["browsingActivity", "websiteContent", "technicalAndInteraction"].every((permission) =>
+      permissions.data_collection?.includes(permission),
+    )
+  ) {
+    return true;
+  }
+  return browser.permissions.request({
+    data_collection: ["browsingActivity", "websiteContent", "technicalAndInteraction"],
+  } as Parameters<typeof browser.permissions.request>[0]);
+}
+
+export function CloudDatabasePanel({
+  snapshot,
+  onUpdate,
+}: {
+  snapshot: PopupSnapshot;
+  onUpdate: (snapshot: PopupSnapshot) => void;
+}) {
+  const [url, setUrl] = useState(snapshot.cloud.configuration?.url ?? "");
+  const [provider, setProvider] = useState<DatabaseProvider>(
+    snapshot.cloud.configuration?.provider ?? "libsql",
+  );
+  const [token, setToken] = useState("");
+  const [persistent, setPersistent] = useState(
+    snapshot.cloud.configuration?.tokenPersistence !== "session",
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [conflicts, setConflicts] = useState<unknown[] | null>(null);
+  const [logs, setLogs] = useState<DatabaseLog[]>([]);
+  const [behavior, setBehavior] = useState<DatabaseBehavior>(
+    snapshot.cloud.configuration?.behavior ?? DEFAULT_DATABASE_BEHAVIOR,
+  );
+  const [pending, startTransition] = useTransition();
+  const importInput = useRef<HTMLInputElement>(null);
+
+  const loadLogs = () =>
+    sendMessage({ type: "GET_DATABASE_LOGS" }).then((response) => {
+      if (response.ok) setLogs((response.logs ?? []) as DatabaseLog[]);
+    });
+
+  useEffect(() => {
+    void loadLogs();
+  }, [snapshot.cloud.status.lastSyncAt, snapshot.cloud.pending]);
+
+  const run = (action: () => Promise<void>) => {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await action();
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Cloud database action failed");
+      }
+    });
+  };
+
+  const connect = () =>
+    run(async () => {
+      if (!(await requestCloudConsent()))
+        throw new Error("Cloud data transmission was not allowed");
+      const response = await sendMessage({
+        type: "CONFIGURE_CLOUD_DATABASE",
+        url,
+        authToken: token,
+        provider,
+        tokenPersistence: persistent ? "persistent" : "session",
+        deviceName: snapshot.deviceName ?? "Browser",
+      });
+      if (!response.ok) throw new Error(response.error);
+      setToken("");
+      if (response.snapshot) onUpdate(response.snapshot);
+    });
+
+  const sync = () =>
+    run(async () => {
+      const response = await sendMessage({ type: "SYNC_NOW" });
+      if (!response.ok) throw new Error(response.error);
+      if (response.snapshot) onUpdate(response.snapshot);
+    });
+
+  const disconnect = () =>
+    run(async () => {
+      const response = await sendMessage({ type: "DISCONNECT_CLOUD_DATABASE" });
+      if (!response.ok) throw new Error(response.error);
+      if (response.snapshot) onUpdate(response.snapshot);
+    });
+
+  const exportData = () =>
+    run(async () => {
+      const response = await sendMessage({ type: "EXPORT_DATA" });
+      if (!response.ok || !response.exportData) {
+        throw new Error(response.ok ? "Export returned no data" : response.error);
+      }
+      const href = URL.createObjectURL(
+        new Blob([JSON.stringify(response.exportData, null, 2)], { type: "application/json" }),
+      );
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = `trackingext-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(href);
+    });
+
+  const importData = (file: File) =>
+    run(async () => {
+      const response = await sendMessage({
+        type: "IMPORT_DATA",
+        data: JSON.parse(await file.text()),
+      });
+      if (!response.ok) throw new Error(response.error);
+      if (response.snapshot) onUpdate(response.snapshot);
+    });
+
+  const showConflicts = () =>
+    run(async () => {
+      const response = await sendMessage({ type: "GET_CONFLICTS" });
+      if (!response.ok) throw new Error(response.error);
+      setConflicts(response.conflicts ?? []);
+    });
+
+  const configuration = snapshot.cloud.configuration;
+  const status = snapshot.cloud.status;
+
+  return (
+    <div className="panel stack settings-panel">
+      <div className="row wrap" style={{ justifyContent: "space-between" }}>
+        <span className="section-title" style={{ margin: 0 }}>
+          Cloud database
+        </span>
+        <span className="pill">{status.state}</span>
+      </div>
+      <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+        Sends tracked URLs, page titles, this device name, and settings only to the database you
+        choose.
+      </p>
+      <M3Select
+        label="Database provider"
+        value={provider}
+        onChange={(event) => setProvider(event.target.value as DatabaseProvider)}
+      >
+        <option value="libsql">libSQL / Turso / self-hosted</option>
+        <option value="d1">Cloudflare D1 Worker</option>
+      </M3Select>
+      <M3TextField
+        id="cloud-database-url"
+        label={provider === "d1" ? "Worker URL" : "Database URL"}
+        type="url"
+        value={url}
+        onChange={setUrl}
+      />
+      <M3TextField
+        id="cloud-database-token"
+        label={configuration ? "New access token" : "Access token"}
+        type="password"
+        value={token}
+        onChange={setToken}
+        autoComplete="off"
+      />
+      <M3SwitchRow
+        id="cloud-persist-token"
+        title="Remember token"
+        description={
+          persistent ? "Stored in this browser profile" : "Forgotten when the browser session ends"
+        }
+        checked={persistent}
+        onChange={setPersistent}
+      />
+      <M3Button block disabled={pending || !url.trim() || !token.trim()} onClick={connect}>
+        {pending ? "Working…" : configuration ? "Test and update connection" : "Connect database"}
+      </M3Button>
+      {configuration ? (
+        <>
+          <M3SwitchRow
+            id="database-automatic-sync"
+            title="Automatic sync"
+            description="Sync on browser events and a background schedule"
+            checked={behavior.automaticSync}
+            onChange={(automaticSync) => setBehavior((current) => ({ ...current, automaticSync }))}
+          />
+          <M3Select
+            label="Background sync interval"
+            value={String(behavior.syncIntervalMinutes)}
+            disabled={!behavior.automaticSync}
+            onChange={(event) =>
+              setBehavior((current) => ({
+                ...current,
+                syncIntervalMinutes: Number(
+                  event.target.value,
+                ) as DatabaseBehavior["syncIntervalMinutes"],
+              }))
+            }
+          >
+            {[2, 5, 15, 30].map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutes} minutes
+              </option>
+            ))}
+          </M3Select>
+          <M3Button
+            variant="tonal"
+            disabled={pending}
+            onClick={() =>
+              run(async () => {
+                const response = await sendMessage({ type: "UPDATE_DATABASE_BEHAVIOR", behavior });
+                if (!response.ok) throw new Error(response.error);
+                if (response.snapshot) onUpdate(response.snapshot);
+              })
+            }
+          >
+            Save database behavior
+          </M3Button>
+          <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+            Last sync:{" "}
+            {status.lastSyncAt ? new Date(status.lastSyncAt).toLocaleString() : "not yet"} ·{" "}
+            {snapshot.cloud.pending} pending · {snapshot.cloud.conflicts} conflicts
+          </p>
+          {status.lastError ? <p className="error">{status.lastError}</p> : null}
+          <div className="row wrap">
+            <M3Button variant="tonal" disabled={pending} onClick={sync}>
+              Retry sync
+            </M3Button>
+            {snapshot.cloud.conflicts ? (
+              <M3Button variant="text" disabled={pending} onClick={showConflicts}>
+                View conflicts
+              </M3Button>
+            ) : null}
+            <M3Button variant="text" disabled={pending} onClick={disconnect}>
+              Disconnect and forget token
+            </M3Button>
+          </div>
+        </>
+      ) : null}
+      {conflicts ? (
+        <pre className="cloud-conflicts">
+          {conflicts.length ? JSON.stringify(conflicts, null, 2) : "No conflicts"}
+        </pre>
+      ) : null}
+      <div className="row wrap">
+        <M3Button variant="text" disabled={pending} onClick={exportData}>
+          Export data
+        </M3Button>
+        <M3Button variant="text" disabled={pending} onClick={() => importInput.current?.click()}>
+          Import data
+        </M3Button>
+        <input
+          ref={importInput}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) importData(file);
+            event.target.value = "";
+          }}
+        />
+      </div>
+      <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+        {provider === "d1"
+          ? "Use the Worker token configured as TRACKINGEXT_TOKEN. Exports never contain it."
+          : "Use a database-scoped token. This also supports a self-hosted libSQL HTTP server. Exports never contain the token."}
+      </p>
+      <div className="stack">
+        <div className="row wrap" style={{ justifyContent: "space-between" }}>
+          <span className="section-title">Local change log</span>
+          <M3Button
+            variant="text"
+            disabled={!logs.length}
+            onClick={() =>
+              void sendMessage({ type: "CLEAR_DATABASE_LOGS" }).then(() => setLogs([]))
+            }
+          >
+            Clear logs
+          </M3Button>
+        </div>
+        {logs.length ? (
+          <div className="list compact-list">
+            {logs.map((log, index) => (
+              <div className="list-item" key={log.id ?? `${log.at}-${index}`}>
+                <span className="name">{log.operation}</span>
+                <span className="sub">{log.message}</span>
+                <span className="sub">{new Date(log.at).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No database changes logged yet.</p>
+        )}
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+    </div>
+  );
+}

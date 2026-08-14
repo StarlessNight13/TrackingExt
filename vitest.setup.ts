@@ -4,4 +4,3 @@ process.env.BETTER_AUTH_SECRET ??= "test-secret-must-be-at-least-32-chars!!";
 process.env.BETTER_AUTH_URL ??= "http://localhost:3000";
 process.env.CORS_ORIGIN ??= "http://localhost:3001";
 process.env.NODE_ENV ??= "test";
-process.env.ALLOW_SIGN_UP ??= "true";

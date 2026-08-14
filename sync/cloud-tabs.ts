@@ -1,0 +1,112 @@
+import type { TrackedTabRecord } from "../core/entities";
+import { createId } from "../core/ids";
+import type { TrackedTab } from "../lib/types";
+import { getCloudCredentials } from "../storage/cloud-configuration";
+import { listCachedTabs } from "../storage/indexed-db";
+import { syncCloudDatabase } from "./cloud-sync";
+import { enqueueOptimisticTab } from "./outbox";
+
+export function cloudTabView(tab: TrackedTabRecord): TrackedTab {
+  return {
+    id: tab.id,
+    name: tab.name,
+    emoji: tab.emoji,
+    tags: JSON.parse(tab.tags) as string[],
+    groupId: tab.groupId,
+    group: null,
+    currentUrl: tab.currentUrl,
+    currentTitle: tab.currentTitle,
+    activeDeviceId: tab.activeDeviceId,
+    lastUpdatedDeviceId: tab.lastUpdatedDeviceId,
+    lastUpdatedAt: new Date(tab.updatedAt).toISOString(),
+    createdAt: new Date(tab.createdAt).toISOString(),
+    archivedAt: tab.archivedAt ? new Date(tab.archivedAt).toISOString() : null,
+    isPrivate: Boolean(tab.isPrivate),
+    revision: tab.revision,
+    deletedAt: tab.deletedAt ? new Date(tab.deletedAt).toISOString() : null,
+    activeDevice: null,
+    lastUpdatedDevice: null,
+  };
+}
+
+export async function createCloudTab(input: {
+  name: string;
+  emoji?: string | null;
+  url: string;
+  title?: string | null;
+}) {
+  const cloud = await getCloudCredentials();
+  if (!cloud) return null;
+  const now = Date.now();
+  const tab: TrackedTabRecord = {
+    id: createId("tab"),
+    workspaceId: cloud.workspaceId,
+    groupId: null,
+    name: input.name,
+    emoji: input.emoji ?? null,
+    tags: "[]",
+    currentUrl: input.url,
+    currentTitle: input.title ?? null,
+    activeDeviceId: cloud.deviceId,
+    lastUpdatedDeviceId: cloud.deviceId,
+    isPrivate: 0,
+    archivedAt: null,
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  };
+  await enqueueOptimisticTab(tab, "create", tab as unknown as Record<string, unknown>);
+  void syncCloudDatabase();
+  return cloudTabView(tab);
+}
+
+async function mutateCloudTab(
+  id: string,
+  kind: "update_location" | "rename" | "delete" | "takeover",
+  payload: Record<string, unknown>,
+) {
+  const cloud = await getCloudCredentials();
+  if (!cloud) return null;
+  const tab = (await listCachedTabs()).find((candidate) => candidate.id === id);
+  if (!tab) return null;
+  const now = Date.now();
+  const optimistic: TrackedTabRecord = {
+    ...tab,
+    ...(kind === "update_location"
+      ? {
+          currentUrl: String(payload.url),
+          currentTitle: payload.title == null ? tab.currentTitle : String(payload.title),
+          activeDeviceId: cloud.deviceId,
+          lastUpdatedDeviceId: cloud.deviceId,
+        }
+      : {}),
+    ...(kind === "rename"
+      ? {
+          name: String(payload.name),
+          ...(payload.emoji !== undefined
+            ? { emoji: payload.emoji == null ? null : String(payload.emoji) }
+            : {}),
+        }
+      : {}),
+    ...(kind === "delete" ? { deletedAt: now, activeDeviceId: null } : {}),
+    ...(kind === "takeover"
+      ? { activeDeviceId: cloud.deviceId, lastUpdatedDeviceId: cloud.deviceId }
+      : {}),
+    updatedAt: now,
+  };
+  await enqueueOptimisticTab(optimistic, kind, payload);
+  void syncCloudDatabase();
+  return cloudTabView(optimistic);
+}
+
+export const updateCloudTabLocation = (
+  id: string,
+  url: string,
+  title: string | null,
+  recordHistory: boolean,
+) => mutateCloudTab(id, "update_location", { url, title, recordHistory });
+export const renameCloudTab = (id: string, name: string, emoji?: string | null) =>
+  mutateCloudTab(id, "rename", { name, emoji });
+export const deleteCloudTab = (id: string) => mutateCloudTab(id, "delete", {});
+export const takeOverCloudTab = (id: string) => mutateCloudTab(id, "takeover", {});

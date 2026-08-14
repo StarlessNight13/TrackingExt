@@ -8,8 +8,11 @@ dist
 build
 *.tsbuildinfo
 
-# Generated files
-apps/web/src/routeTree.gen.ts
+# Extension build outputs
+.output
+.wxt
+stats.html
+stats-*.json
 
 # Environment variables
 .env
