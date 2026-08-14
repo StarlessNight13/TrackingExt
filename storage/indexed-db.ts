@@ -1,7 +1,7 @@
 import type { TrackedTabRecord } from "../core/entities";
 
 export const DATABASE_NAME = "trackingext";
-export const DATABASE_VERSION = 1;
+export const DATABASE_VERSION = 2;
 
 export type OutboxKind = "create" | "update_location" | "rename" | "delete" | "takeover";
 
@@ -50,13 +50,17 @@ export function openLocalDatabase() {
       const open = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
       open.onupgradeneeded = () => {
         const database = open.result;
-        database.createObjectStore("tabs", { keyPath: "id" }).createIndex("updatedAt", "updatedAt");
-        const outbox = database.createObjectStore("outbox", { keyPath: "operationId" });
-        outbox.createIndex("createdAt", "createdAt");
-        outbox.createIndex("entityId", "entityId");
-        database.createObjectStore("meta");
-        database.createObjectStore("conflicts", { keyPath: "operationId" });
-        database.createObjectStore("diagnostics", { keyPath: "id", autoIncrement: true });
+        if (!database.objectStoreNames.contains("tabs")) {
+          database.createObjectStore("tabs", { keyPath: "id" }).createIndex("updatedAt", "updatedAt");
+          const outbox = database.createObjectStore("outbox", { keyPath: "operationId" });
+          outbox.createIndex("createdAt", "createdAt");
+          outbox.createIndex("entityId", "entityId");
+          database.createObjectStore("meta");
+          database.createObjectStore("conflicts", { keyPath: "operationId" });
+          database.createObjectStore("diagnostics", { keyPath: "id", autoIncrement: true });
+        } else {
+          open.transaction?.objectStore("meta").delete("tabsCursor");
+        }
       };
       open.onsuccess = () => resolve(open.result);
       open.onerror = () => reject(open.error);
@@ -247,7 +251,7 @@ export async function exportIndexedDb(): Promise<IndexedDbExport> {
 
 export async function importIndexedDb(data: IndexedDbExport) {
   if (!Array.isArray(data.tabs) || !Array.isArray(data.outbox) || !Array.isArray(data.conflicts)) {
-    throw new Error("Invalid TrackingExt export data");
+    throw new Error("Invalid TabTether export data");
   }
   const database = await openLocalDatabase();
   const transaction = database.transaction(["tabs", "outbox", "conflicts", "meta"], "readwrite");

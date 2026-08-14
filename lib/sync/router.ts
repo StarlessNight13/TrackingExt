@@ -47,7 +47,7 @@ export async function syncCreateTab(input: {
 }): Promise<TrackedTab> {
   const state = await getLocalState();
   if (await getCloudCredentials()) {
-    const tab = await createCloudTab(input);
+    const tab = await createCloudTab({ ...input, recordHistory: state.settings.recordHistory });
     if (!tab) throw new Error("Cloud database is not configured");
     if (state.syncModes.lan) void broadcastLanTabEvent({ type: "tab_created", tab });
     return tab;

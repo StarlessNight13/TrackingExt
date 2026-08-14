@@ -24,8 +24,28 @@ export function cloudTabView(tab: TrackedTabRecord): TrackedTab {
     isPrivate: Boolean(tab.isPrivate),
     revision: tab.revision,
     deletedAt: tab.deletedAt ? new Date(tab.deletedAt).toISOString() : null,
-    activeDevice: null,
-    lastUpdatedDevice: null,
+    activeDevice:
+      tab.activeDeviceId && tab.activeDeviceName
+        ? {
+            id: tab.activeDeviceId,
+            name: tab.activeDeviceName,
+            browser: tab.activeDeviceBrowser ?? "Unknown browser",
+            lastSeenAt: tab.activeDeviceLastSeenAt
+              ? new Date(tab.activeDeviceLastSeenAt).toISOString()
+              : undefined,
+          }
+        : null,
+    lastUpdatedDevice:
+      tab.lastUpdatedDeviceId && tab.lastUpdatedDeviceName
+        ? {
+            id: tab.lastUpdatedDeviceId,
+            name: tab.lastUpdatedDeviceName,
+            browser: tab.lastUpdatedDeviceBrowser ?? "Unknown browser",
+            lastSeenAt: tab.lastUpdatedDeviceLastSeenAt
+              ? new Date(tab.lastUpdatedDeviceLastSeenAt).toISOString()
+              : undefined,
+          }
+        : null,
   };
 }
 
@@ -34,6 +54,7 @@ export async function createCloudTab(input: {
   emoji?: string | null;
   url: string;
   title?: string | null;
+  recordHistory: boolean;
 }) {
   const cloud = await getCloudCredentials();
   if (!cloud) return null;
@@ -56,7 +77,10 @@ export async function createCloudTab(input: {
     updatedAt: now,
     deletedAt: null,
   };
-  await enqueueOptimisticTab(tab, "create", tab as unknown as Record<string, unknown>);
+  await enqueueOptimisticTab(tab, "create", {
+    ...(tab as unknown as Record<string, unknown>),
+    recordHistory: input.recordHistory,
+  });
   void syncCloudDatabase();
   return cloudTabView(tab);
 }

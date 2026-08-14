@@ -74,9 +74,7 @@ export async function withDatabaseClient<T>(
 ) {
   const client = adapters[credentials.provider].connect(credentials);
   try {
-    const result = await action(client);
-    await appendDatabaseLog({ level: "info", operation, message: "Completed" });
-    return result;
+    return await action(client);
   } catch (error) {
     await appendDatabaseLog({
       level: "error",

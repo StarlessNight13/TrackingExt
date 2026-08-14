@@ -12,7 +12,7 @@ import { supportedSyncModes, supportsLanSync } from "@/lib/browser-capabilities"
 import { formatDevice, relativeTime } from "@/lib/view-utils";
 
 import { ExtensionThemeProvider } from "./components/extension-theme-provider";
-import { IconLayoutDashboard, IconSettings } from "./components/icons";
+import { IconSettings } from "./components/icons";
 import { LanPairingPanel } from "./components/lan-pairing-panel";
 import { M3SwitchRow } from "./components/m3-switch";
 import { M3TextArea, M3TextField } from "./components/m3-text-field";
@@ -331,7 +331,7 @@ function MainView({
   return (
     <div className="stack">
       <div className="brand">
-        <h1>TrackingExt</h1>
+        <h1>TabTether</h1>
         <button
           className="btn ghost icon-btn"
           type="button"
@@ -426,14 +426,14 @@ function MainView({
         {!current ? (
           <div className="panel">
             <p className="muted" style={{ margin: 0 }}>
-              Open a normal web page to track it.
+              Open a normal web page to tether it.
             </p>
           </div>
         ) : tracked ? (
           <div className="panel compact-track">
             <div className="status-row">
               <span className="status-dot" />
-              Tracking
+              Tethered
               {!current.isActiveOwner ? <span className="pill">owned elsewhere</span> : null}
             </div>
             <M3TextField id="tracked-name" label="Name" value={name} onChange={setName} />
@@ -498,7 +498,7 @@ function MainView({
                   })
                 }
               >
-                Stop Tracking
+                Untether tab
               </button>
             </div>
           </div>
@@ -529,7 +529,7 @@ function MainView({
                 })
               }
             >
-              {pending ? "Tracking…" : "Track this tab"}
+              {pending ? "Tethering…" : "Tether this tab"}
             </button>
           </div>
         )}
@@ -538,7 +538,7 @@ function MainView({
       <div className="section">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <h2 className="section-title" style={{ margin: 0 }}>
-            Tracked Tabs
+            Tethered tabs
           </h2>
           {snapshot.trackedTabs.length > 0 ? (
             <button className="btn secondary" type="button" onClick={onOpenResume}>
@@ -547,7 +547,7 @@ function MainView({
           ) : null}
         </div>
         {otherTabs.length === 0 ? (
-          <div className="empty">{tracked ? "No other tracked tabs." : "No tracked tabs yet."}</div>
+          <div className="empty">{tracked ? "No other tethered tabs." : "No tethered tabs yet."}</div>
         ) : (
           <div className="list compact-list">
             {otherTabs.map((tab) => (
@@ -585,17 +585,6 @@ function MainView({
 
       {error ? <p className="error">{error}</p> : null}
 
-      <div className="footer footer--actions">
-        <button
-          className="btn ghost icon-btn"
-          type="button"
-          title="Open local dashboard"
-          aria-label="Open local dashboard"
-          onClick={() => openDashboard(snapshot)}
-        >
-          <IconLayoutDashboard />
-        </button>
-      </div>
     </div>
   );
 }

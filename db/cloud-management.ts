@@ -5,6 +5,86 @@ import { getCloudCredentials } from "../storage/cloud-configuration";
 import { withDatabaseClient } from "../services/database-service";
 import type { PrivacySettings } from "../lib/types";
 
+const backupTables = {
+  workspace: ["id", "singleton", "created_at", "updated_at"],
+  device: [
+    "id",
+    "workspace_id",
+    "name",
+    "browser",
+    "last_seen_at",
+    "revision",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+  ],
+  group: [
+    "id",
+    "workspace_id",
+    "name",
+    "notes",
+    "pinned_tracked_tab_id",
+    "revision",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+  ],
+  tracked_tab: [
+    "id",
+    "workspace_id",
+    "group_id",
+    "name",
+    "emoji",
+    "tags",
+    "current_url",
+    "current_title",
+    "active_device_id",
+    "last_updated_device_id",
+    "is_private",
+    "archived_at",
+    "revision",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+  ],
+  tracked_tab_history: [
+    "id",
+    "workspace_id",
+    "tracked_tab_id",
+    "operation_id",
+    "url",
+    "title",
+    "visited_at",
+    "created_at",
+  ],
+  workspace_settings: [
+    "workspace_id",
+    "record_history",
+    "strip_query_params",
+    "strip_fragments",
+    "excluded_hosts",
+    "dashboard_theme_seed",
+    "dashboard_theme_variant",
+    "history_retention_days",
+    "revision",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+  ],
+  mutation_receipt: ["operation_id", "workspace_id", "entity_type", "entity_id", "applied_at"],
+} as const;
+
+type BackupTable = keyof typeof backupTables;
+type BackupRows = Record<BackupTable, Record<string, unknown>[]>;
+
+export type CloudDatabaseExport = {
+  format: "trackingext-cloud-database";
+  version: 1;
+  exportedAt: string;
+  workspaceId: string;
+  data: BackupRows;
+};
+
 async function withDatabase<T>(run: (client: DatabaseClient, workspaceId: string) => Promise<T>) {
   const credentials = await getCloudCredentials();
   if (!credentials) throw new Error("Cloud database is not connected");
@@ -185,13 +265,62 @@ export const updateCloudSettings = (settings: PrivacySettings) =>
     if (result.rowsAffected !== 1) throw new Error("Settings changed on another device; retry");
   });
 
-export const assignCloudTab = (tabId: string, groupId: string | null, revision: number) =>
+export const exportCloudDatabase = () =>
   withDatabase(async (client, workspaceId) => {
-    const result = await client.execute({
-      sql: `UPDATE tracked_tab SET group_id = ?, updated_at = ?, revision = revision + 1
-        WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at IS NULL
-        AND (? IS NULL OR EXISTS (SELECT 1 FROM "group" WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL))`,
-      args: [groupId, Date.now(), tabId, workspaceId, revision, groupId, groupId, workspaceId],
-    });
-    if (result.rowsAffected !== 1) throw new Error("Activity or group changed; sync and retry");
+    const data = {} as BackupRows;
+    for (const [table, columns] of Object.entries(backupTables) as [BackupTable, readonly string[]][]) {
+      const workspaceColumn = table === "workspace" ? "id" : "workspace_id";
+      const result = await client.execute({
+        sql: `SELECT ${columns.join(", ")} FROM "${table}" WHERE ${workspaceColumn} = ?`,
+        args: [workspaceId],
+      });
+      data[table] = result.rows.map((row) => Object.fromEntries(columns.map((key) => [key, row[key]])));
+    }
+    return {
+      format: "trackingext-cloud-database",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      workspaceId,
+      data,
+    } satisfies CloudDatabaseExport;
+  });
+
+export const importCloudDatabase = (value: unknown) =>
+  withDatabase(async (client, workspaceId) => {
+    if (!value || typeof value !== "object") throw new Error("Invalid cloud database export");
+    const backup = value as Partial<CloudDatabaseExport>;
+    if (
+      backup.format !== "trackingext-cloud-database" ||
+      backup.version !== 1 ||
+      backup.workspaceId !== workspaceId ||
+      !backup.data
+    ) {
+      throw new Error("Choose a cloud backup from this database workspace");
+    }
+    const data = backup.data as Partial<BackupRows>;
+    for (const table of Object.keys(backupTables) as BackupTable[]) {
+      if (!Array.isArray(data[table])) throw new Error(`Cloud backup is missing ${table}`);
+    }
+    const statements = [
+      "tracked_tab_history",
+      "mutation_receipt",
+      "tracked_tab",
+      "group",
+      "device",
+      "workspace_settings",
+      "workspace",
+    ].map((table) => ({
+      sql: `DELETE FROM "${table}" WHERE ${table === "workspace" ? "id" : "workspace_id"} = ?`,
+      args: [workspaceId],
+    }));
+    for (const [table, columns] of Object.entries(backupTables) as [BackupTable, readonly string[]][]) {
+      for (const row of data[table] ?? []) {
+        if (!columns.every((column) => column in row)) throw new Error(`Cloud backup has an invalid ${table} row`);
+        statements.push({
+          sql: `INSERT INTO "${table}" (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
+          args: columns.map((column) => (row[column] ?? null) as never),
+        });
+      }
+    }
+    await client.batch(statements, "write");
   });

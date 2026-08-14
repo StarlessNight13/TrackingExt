@@ -39,4 +39,10 @@ export type TrackedTabRecord = {
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
+  activeDeviceName?: string | null;
+  activeDeviceBrowser?: string | null;
+  activeDeviceLastSeenAt?: number | null;
+  lastUpdatedDeviceName?: string | null;
+  lastUpdatedDeviceBrowser?: string | null;
+  lastUpdatedDeviceLastSeenAt?: number | null;
 };

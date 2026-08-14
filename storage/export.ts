@@ -37,7 +37,7 @@ export async function createExport(settings: PrivacySettings): Promise<TrackingE
 }
 
 export async function restoreExport(value: unknown) {
-  if (!value || typeof value !== "object") throw new Error("Invalid TrackingExt export");
+  if (!value || typeof value !== "object") throw new Error("Invalid TabTether export");
   const data = value as Partial<TrackingExtExport>;
   if (
     data.format !== "trackingext-extension" ||
@@ -47,7 +47,7 @@ export async function restoreExport(value: unknown) {
     !data.recordCounts ||
     !data.checksum
   ) {
-    throw new Error("Unsupported TrackingExt export version");
+    throw new Error("Unsupported TabTether export version");
   }
   if (
     data.recordCounts.tabs !== data.data.tabs.length ||
@@ -55,7 +55,7 @@ export async function restoreExport(value: unknown) {
     data.recordCounts.conflicts !== data.data.conflicts.length ||
     data.checksum !== (await checksum(data.data))
   ) {
-    throw new Error("TrackingExt export verification failed");
+    throw new Error("TabTether export verification failed");
   }
   await importIndexedDb(data.data);
   return data.settings;

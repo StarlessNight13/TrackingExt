@@ -35,11 +35,11 @@ export function OnboardingWizard({
   return (
     <div className="stack">
       <div className="brand">
-        <h1>TrackingExt</h1>
+        <h1>TabTether</h1>
         <span className="meta">Setup</span>
       </div>
       <p className="muted">
-        Tracked activities stay local unless you connect a cloud database later.
+        Tethered activities stay local unless you connect a cloud database later.
       </p>
       {supportsLanSync ? (
         <M3SwitchRow title="Direct LAN sync" checked={lan} onChange={setLan} />

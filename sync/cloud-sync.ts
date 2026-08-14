@@ -1,5 +1,6 @@
 import type { WriteResult } from "../core/conflicts";
 import type { TrackedTabRecord } from "../core/entities";
+import { historyId } from "../core/ids";
 import type { DatabaseClient, Statement } from "../db/client";
 import { tabFromRow, takeOverTrackedTab, updateTrackedTabLocation } from "../db/tracked-tabs";
 import { getCloudCredentials, setCloudStatus } from "../storage/cloud-configuration";
@@ -63,6 +64,7 @@ async function applyConditionalMutation(
 
   let mutation: Statement;
   let receiptCheck: Statement;
+  let history: Statement | undefined;
   if (operation.kind === "create") {
     const tab = operation.payload as unknown as TrackedTabRecord;
     mutation = {
@@ -94,6 +96,28 @@ async function applyConditionalMutation(
       sql: "SELECT 1 FROM tracked_tab WHERE id = ? AND workspace_id = ? AND created_at = ?",
       args: [tab.id, workspaceId, tab.createdAt],
     };
+    if (operation.payload.recordHistory === true) {
+      history = {
+        sql: `INSERT OR IGNORE INTO tracked_tab_history
+          (id, workspace_id, tracked_tab_id, operation_id, url, title, visited_at, created_at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (
+            SELECT 1 FROM tracked_tab WHERE id = ? AND workspace_id = ? AND created_at = ?
+          )`,
+        args: [
+          historyId(operation.operationId),
+          workspaceId,
+          tab.id,
+          operation.operationId,
+          tab.currentUrl,
+          tab.currentTitle,
+          tab.createdAt,
+          tab.createdAt,
+          tab.id,
+          workspaceId,
+          tab.createdAt,
+        ],
+      };
+    }
   } else if (operation.kind === "rename") {
     mutation = {
       sql: `UPDATE tracked_tab SET name = ?, emoji = ?, tags = ?, updated_at = ?, revision = revision + 1
@@ -133,6 +157,7 @@ async function applyConditionalMutation(
   const [changed] = await client.batch(
     [
       mutation,
+      ...(history ? [history] : []),
       {
         sql: `INSERT INTO mutation_receipt (operation_id, workspace_id, entity_type, entity_id, applied_at)
           SELECT ?, ?, 'tab', ?, ? WHERE EXISTS (${receiptCheck.sql})`,
@@ -192,9 +217,15 @@ async function push(client: DatabaseClient, workspaceId: string, deviceId: strin
 async function pull(client: DatabaseClient, workspaceId: string) {
   const cursor = await getTabsCursor();
   const result = await client.execute({
-    sql: `SELECT * FROM tracked_tab WHERE workspace_id = ?
-      AND (updated_at > ? OR (updated_at = ? AND id > ?))
-      ORDER BY updated_at, id LIMIT 500`,
+    sql: `SELECT t.*, active.name AS active_device_name, active.browser AS active_device_browser,
+      active.last_seen_at AS active_device_last_seen_at, updated.name AS last_updated_device_name,
+      updated.browser AS last_updated_device_browser, updated.last_seen_at AS last_updated_device_last_seen_at
+      FROM tracked_tab t
+      LEFT JOIN device active ON active.id = t.active_device_id AND active.deleted_at IS NULL
+      LEFT JOIN device updated ON updated.id = t.last_updated_device_id AND updated.deleted_at IS NULL
+      WHERE t.workspace_id = ?
+      AND (t.updated_at > ? OR (t.updated_at = ? AND t.id > ?))
+      ORDER BY t.updated_at, t.id LIMIT 500`,
     args: [workspaceId, cursor.updatedAt, cursor.updatedAt, cursor.id],
   });
   const tabs = result.rows.map(tabFromRow);

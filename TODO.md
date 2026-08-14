@@ -1,6 +1,6 @@
 # Product backlog
 
-This backlog captures the next product opportunities for TrackingExt.
+This backlog captures the next product opportunities for TabTether.
 
 - [x] Search, tags, and filters — find activities by name, page, or domain and
       organize them with reusable tags.

@@ -21,9 +21,9 @@ export default defineConfig({
     const isFirefoxAndroid = browser === "firefox-android";
 
     return {
-      name: "TrackingExt — Tracked Tabs",
+      name: "TabTether",
       description:
-        "Mark tabs as persistent activities that sync across Firefox and Chromium browsers.",
+        "Tether tabs as persistent activities that sync across Firefox and Chromium browsers.",
       permissions: [
         "tabs",
         "storage",
@@ -44,7 +44,7 @@ export default defineConfig({
                   default: "Alt+Shift+R",
                   mac: "Alt+Shift+R",
                 },
-                description: "Resume a tracked activity (open & take over)",
+                description: "Resume a tethered activity (open & take over)",
               },
             },
           }),

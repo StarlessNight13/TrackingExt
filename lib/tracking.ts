@@ -91,17 +91,17 @@ export async function clearBindingsForTrackedTab(trackedTabId: string) {
 export async function trackCurrentTab(tabId: number, name?: string, emoji?: string) {
   const tab = await browser.tabs.get(tabId);
   if (!isTrackableUrl(tab.url)) {
-    throw new Error("This page cannot be tracked");
+    throw new Error("This page cannot be tethered");
   }
 
   const state = await getLocalState();
   if (!(await canUseTrackingFeatures())) {
-    throw new Error("Enable local tracking in settings");
+    throw new Error("Enable local tab tethering in settings");
   }
 
   const url = sanitizeUrl(tab.url!, state.settings);
   if (isExcludedHost(url, state.settings.excludedHosts)) {
-    throw new Error("This website is excluded from tracking");
+    throw new Error("This website is excluded from tab tethering");
   }
 
   await ensureLocalDeviceId();
@@ -127,7 +127,7 @@ export async function stopTracking(trackedTabId: string) {
 
 export async function renameTrackedTab(id: string, name: string, emoji?: string | null) {
   const updated = await syncRenameTab(id, name, emoji);
-  if (!updated) throw new Error("Tracked tab not found");
+  if (!updated) throw new Error("Tethered tab not found");
   const state = await getLocalState();
   await Promise.all(
     getBoundTabIds(state.bindings, id).map((tabId) => applyTrackedTitleBadge(tabId, updated.emoji)),
@@ -139,7 +139,7 @@ export async function takeOver(trackedTabId: string, browserTabId?: number) {
   await ensureLocalDeviceId();
 
   const updated = await syncTakeOver(trackedTabId);
-  if (!updated) throw new Error("Tracked tab not found");
+  if (!updated) throw new Error("Tethered tab not found");
 
   if (browserTabId !== undefined) {
     await setBinding(browserTabId, trackedTabId);

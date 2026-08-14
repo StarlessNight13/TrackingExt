@@ -22,6 +22,18 @@ export function tabFromRow(row: Record<string, unknown>): TrackedTabRecord {
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
     deletedAt: row.deleted_at == null ? null : Number(row.deleted_at),
+    activeDeviceName: row.active_device_name == null ? null : String(row.active_device_name),
+    activeDeviceBrowser: row.active_device_browser == null ? null : String(row.active_device_browser),
+    activeDeviceLastSeenAt:
+      row.active_device_last_seen_at == null ? null : Number(row.active_device_last_seen_at),
+    lastUpdatedDeviceName:
+      row.last_updated_device_name == null ? null : String(row.last_updated_device_name),
+    lastUpdatedDeviceBrowser:
+      row.last_updated_device_browser == null ? null : String(row.last_updated_device_browser),
+    lastUpdatedDeviceLastSeenAt:
+      row.last_updated_device_last_seen_at == null
+        ? null
+        : Number(row.last_updated_device_last_seen_at),
   };
 }
 

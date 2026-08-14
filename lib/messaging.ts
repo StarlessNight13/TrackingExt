@@ -83,6 +83,8 @@ export type ExtensionRequest =
   | { type: "DISCONNECT_CLOUD_DATABASE" }
   | { type: "EXPORT_DATA" }
   | { type: "IMPORT_DATA"; data: unknown }
+  | { type: "EXPORT_CLOUD_DATABASE" }
+  | { type: "IMPORT_CLOUD_DATABASE"; data: unknown }
   | { type: "GET_CONFLICTS" }
   | { type: "GET_DATABASE_LOGS" }
   | { type: "CLEAR_DATABASE_LOGS" }
@@ -93,7 +95,6 @@ export type ExtensionRequest =
   | { type: "LIST_CLOUD_DEVICES" }
   | { type: "RENAME_CLOUD_DEVICE"; id: string; name: string; revision: number }
   | { type: "REMOVE_CLOUD_DEVICE"; id: string; revision: number }
-  | { type: "ASSIGN_CLOUD_TAB"; tabId: string; groupId: string | null; revision: number };
 
 export type ExtensionResponse =
   | {
@@ -103,6 +104,7 @@ export type ExtensionResponse =
       localPairingToken?: string;
       cloudDatabaseSpike?: CloudDatabaseSpikeResult;
       exportData?: TrackingExtExport;
+      cloudDatabaseExport?: unknown;
       conflicts?: unknown[];
       groups?: unknown[];
       devices?: unknown[];

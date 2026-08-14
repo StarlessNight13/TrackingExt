@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
-  TRACKINGEXT_TOKEN: string;
+  TABTETHER_TOKEN?: string;
+  TRACKINGEXT_TOKEN?: string;
 }
 
 type Statement = string | { sql: string; args?: unknown[] };
@@ -23,7 +24,8 @@ function prepared(db: D1Database, statement: Statement) {
 export default {
   async fetch(request, env): Promise<Response> {
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
-    if (request.method !== "POST" || request.headers.get("Authorization") !== `Bearer ${env.TRACKINGEXT_TOKEN}`)
+    const token = env.TABTETHER_TOKEN ?? env.TRACKINGEXT_TOKEN;
+    if (request.method !== "POST" || !token || request.headers.get("Authorization") !== `Bearer ${token}`)
       return json({ error: "Unauthorized" }, 401);
     try {
       const { statements } = (await request.json()) as { statements?: Statement[] };

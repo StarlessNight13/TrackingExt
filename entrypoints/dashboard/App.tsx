@@ -98,7 +98,7 @@ export default function App() {
               <div className="brand">
                 <div className="row" style={{ gap: 8 }}>
                   <img src="/icon/128.png" width={28} height={28} alt="" />
-                  <h1>TrackingExt</h1>
+                  <h1>TabTether</h1>
                 </div>
                 <span className="meta">Local dashboard</span>
               </div>

@@ -50,7 +50,6 @@ import {
 import type { PrivacySettings, SyncModes } from "../lib/types";
 import {
   clearCloudHistory,
-  assignCloudTab,
   deleteCloudGroup,
   getCloudHistory,
   listCloudDevices,
@@ -59,6 +58,8 @@ import {
   renameCloudDevice,
   saveCloudGroup,
   updateCloudSettings,
+  exportCloudDatabase,
+  importCloudDatabase,
 } from "../db/cloud-management";
 import { getCloudCredentials } from "../storage/cloud-configuration";
 
@@ -146,11 +147,6 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
   try {
     switch (message.type) {
       case "GET_SNAPSHOT": {
-        try {
-          await syncCloudDatabase();
-        } catch {
-          // Cached data remains available while the cloud database is unavailable.
-        }
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
@@ -177,8 +173,16 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 
       case "OPEN_TAB": {
         const state = await getLocalState();
-        const tracked = state.cachedTabs.find((t) => t.id === message.trackedTabId);
-        if (!tracked) throw new Error("Tracked tab not found");
+        const cloud = await getCloudCredentials();
+        const cloudTab = cloud
+          ? (await listCachedTabs()).find((tab) => tab.id === message.trackedTabId)
+          : null;
+        const tracked = cloud
+          ? cloudTab && !cloudTab.deletedAt
+            ? cloudTabView(cloudTab)
+            : null
+          : state.cachedTabs.find((tab) => tab.id === message.trackedTabId);
+        if (!tracked) throw new Error("Tethered tab not found");
         await openTrackedTab(tracked, message.takeOver ?? false);
         return { ok: true, snapshot: await buildSnapshot() };
       }
@@ -367,6 +371,14 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
+      case "EXPORT_CLOUD_DATABASE":
+        return { ok: true, cloudDatabaseExport: await exportCloudDatabase() };
+
+      case "IMPORT_CLOUD_DATABASE":
+        await importCloudDatabase(message.data);
+        await syncCloudDatabase({ manual: true });
+        return { ok: true, snapshot: await buildSnapshot() };
+
       case "GET_CONFLICTS": {
         return { ok: true, conflicts: await listConflicts() };
       }
@@ -410,17 +422,12 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
         await removeCloudDevice(message.id, message.revision);
         return { ok: true, devices: await listCloudDevices(), snapshot: await buildSnapshot() };
 
-      case "ASSIGN_CLOUD_TAB":
-        await assignCloudTab(message.tabId, message.groupId, message.revision);
-        await syncCloudDatabase();
-        return { ok: true, snapshot: await buildSnapshot() };
-
       default: {
         const unknownType =
           typeof message === "object" && message !== null && "type" in message
             ? String((message as { type: unknown }).type)
             : "undefined";
-        console.warn("[TrackingExt] Unhandled extension message:", message);
+        console.warn("[TabTether] Unhandled extension message:", message);
         return {
           ok: false,
           error: `Unhandled extension action "${unknownType}". Reload the extension and try again.`,
@@ -433,7 +440,7 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
       typeof message === "object" && message !== null && "type" in message
         ? String((message as { type: unknown }).type)
         : "unknown";
-    console.error(`[TrackingExt] ${action} failed:`, error);
+    console.error(`[TabTether] ${action} failed:`, error);
     return {
       ok: false,
       error: `${action}: ${detail}`,
@@ -466,7 +473,7 @@ async function ensureContextMenus() {
 
   await browser.contextMenus.create({
     id: TRACK_CONTEXT_MENU_ID,
-    title: "Track this tab",
+    title: "Tether this tab",
     contexts: ["page", "tab"],
   });
 }
@@ -475,17 +482,17 @@ async function trackFromContextMenu(tabId: number | undefined) {
   if (tabId === undefined) return;
 
   if (!(await canUseTrackingFeatures())) {
-    await showNotification("TrackingExt", "Complete setup and enable tracking first.");
+    await showNotification("TabTether", "Complete setup and enable tab tethering first.");
     return;
   }
 
   try {
     const tracked = await trackCurrentTab(tabId);
-    await showNotification("Tracked tab saved", tracked.name);
+    await showNotification("Tab tethered", tracked.name);
   } catch (error) {
     console.warn("Failed to track page from context menu", error);
     await showNotification(
-      "Could not track this tab",
+      "Could not tether this tab",
       error instanceof Error ? error.message : "Something went wrong.",
     );
   }
@@ -498,7 +505,7 @@ async function startLanSyncIfEnabled() {
     if (!state.syncModes.lan || !state.onboardingComplete) return;
     await syncLanManagerViaOffscreen();
   } catch (error) {
-    console.warn("[TrackingExt] LAN sync startup failed:", error);
+    console.warn("[TabTether] LAN sync startup failed:", error);
   }
 }
 

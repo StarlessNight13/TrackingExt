@@ -1,16 +1,16 @@
 # Privacy disclosure
 
-TrackingExt stores only tabs that the user explicitly marks as tracked.
+TabTether stores only tabs that the user explicitly chooses to tether.
 
 Local mode transmits no data. When the user enables cloud database mode, the extension sends the following to the HTTPS/libSQL endpoint chosen by that user:
 
-- tracked URLs and domains;
+- tethered URLs and domains;
 - page titles;
 - activity names, emoji, tags, groups, and navigation history;
 - device name, browser name, and last-seen time;
 - privacy, retention, and dashboard settings.
 
-LAN mode sends tracked activity data only to explicitly paired peers. TrackingExt has no analytics, advertising, or error-reporting destination.
+LAN mode sends tethered activity data only to explicitly paired peers. TabTether has no analytics, advertising, or error-reporting destination.
 
 The database token is never placed in URLs, logs, diagnostics, or exports. It can be kept in browser-profile extension storage or session-only storage. Disconnecting removes it. Users can rotate a token at their database provider and enter the replacement in Settings.
 

@@ -46,6 +46,7 @@ export function CloudDatabasePanel({
   );
   const [pending, startTransition] = useTransition();
   const importInput = useRef<HTMLInputElement>(null);
+  const cloudImportInput = useRef<HTMLInputElement>(null);
 
   const loadLogs = () =>
     sendMessage({ type: "GET_DATABASE_LOGS" }).then((response) => {
@@ -109,7 +110,7 @@ export function CloudDatabasePanel({
       );
       const anchor = document.createElement("a");
       anchor.href = href;
-      anchor.download = `trackingext-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.download = `tabtether-${new Date().toISOString().slice(0, 10)}.json`;
       anchor.click();
       URL.revokeObjectURL(href);
     });
@@ -118,6 +119,35 @@ export function CloudDatabasePanel({
     run(async () => {
       const response = await sendMessage({
         type: "IMPORT_DATA",
+        data: JSON.parse(await file.text()),
+      });
+      if (!response.ok) throw new Error(response.error);
+      if (response.snapshot) onUpdate(response.snapshot);
+    });
+
+  const exportCloudData = () =>
+    run(async () => {
+      const response = await sendMessage({ type: "EXPORT_CLOUD_DATABASE" });
+      if (!response.ok || !response.cloudDatabaseExport) {
+        throw new Error(response.ok ? "Cloud export returned no data" : response.error);
+      }
+      const href = URL.createObjectURL(
+        new Blob([JSON.stringify(response.cloudDatabaseExport, null, 2)], {
+          type: "application/json",
+        }),
+      );
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = `tabtether-cloud-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(href);
+    });
+
+  const importCloudData = (file: File) =>
+    run(async () => {
+      if (!window.confirm("Replace this cloud database workspace with this backup?")) return;
+      const response = await sendMessage({
+        type: "IMPORT_CLOUD_DATABASE",
         data: JSON.parse(await file.text()),
       });
       if (!response.ok) throw new Error(response.error);
@@ -143,17 +173,28 @@ export function CloudDatabasePanel({
         <span className="pill">{status.state}</span>
       </div>
       <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-        Sends tracked URLs, page titles, this device name, and settings only to the database you
+        Sends tethered URLs, page titles, this device name, and settings only to the database you
         choose.
       </p>
-      <M3Select
-        label="Database provider"
-        value={provider}
-        onChange={(event) => setProvider(event.target.value as DatabaseProvider)}
-      >
-        <option value="libsql">libSQL / Turso / self-hosted</option>
-        <option value="d1">Cloudflare D1 Worker</option>
-      </M3Select>
+      <div className="provider-choice" role="group" aria-label="Database provider">
+        <span className="provider-choice__label">Database provider</span>
+        <button
+          className={`provider-choice__option${provider === "libsql" ? " provider-choice__option--selected" : ""}`}
+          type="button"
+          aria-pressed={provider === "libsql"}
+          onClick={() => setProvider("libsql")}
+        >
+          libSQL / Turso / self-hosted
+        </button>
+        <button
+          className={`provider-choice__option${provider === "d1" ? " provider-choice__option--selected" : ""}`}
+          type="button"
+          aria-pressed={provider === "d1"}
+          onClick={() => setProvider("d1")}
+        >
+          Cloudflare D1 Worker
+        </button>
+      </div>
       <M3TextField
         id="cloud-database-url"
         label={provider === "d1" ? "Worker URL" : "Database URL"}
@@ -241,6 +282,29 @@ export function CloudDatabasePanel({
               Disconnect and forget token
             </M3Button>
           </div>
+          <div className="row wrap">
+            <M3Button variant="text" disabled={pending} onClick={exportCloudData}>
+              Export cloud backup
+            </M3Button>
+            <M3Button
+              variant="text"
+              disabled={pending}
+              onClick={() => cloudImportInput.current?.click()}
+            >
+              Restore cloud backup
+            </M3Button>
+            <input
+              ref={cloudImportInput}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) importCloudData(file);
+                event.target.value = "";
+              }}
+            />
+          </div>
         </>
       ) : null}
       {conflicts ? (
@@ -269,7 +333,7 @@ export function CloudDatabasePanel({
       </div>
       <p className="muted" style={{ margin: 0, fontSize: 11 }}>
         {provider === "d1"
-          ? "Use the Worker token configured as TRACKINGEXT_TOKEN. Exports never contain it."
+          ? "Use the Worker token configured as TABTETHER_TOKEN. Exports never contain it."
           : "Use a database-scoped token. This also supports a self-hosted libSQL HTTP server. Exports never contain the token."}
       </p>
       <div className="stack">

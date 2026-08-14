@@ -89,7 +89,7 @@ export function ResumePicker({
 
       {tabs.length === 0 ? (
         <div className="empty">
-          {deferredQuery ? "No matching activities." : "No tracked activities to resume."}
+          {deferredQuery ? "No matching activities." : "No tethered activities to resume."}
         </div>
       ) : (
         <div className="list compact-list">

@@ -750,6 +750,63 @@ a {
   cursor: pointer;
 }
 
+.provider-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.provider-choice__label {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant, var(--ink-muted));
+}
+
+.provider-choice__option {
+  min-height: 48px;
+  border: 1px solid var(--md-sys-color-outline, var(--line));
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--ink);
+  padding: 8px 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.provider-choice__option--selected {
+  border-color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent);
+  color: var(--md-sys-color-primary);
+}
+
+.cloud-management-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.cloud-management-card__header {
+  gap: 12px;
+}
+
+.cloud-management-card__name {
+  font-size: 16px;
+}
+
+.cloud-group-card__notes {
+  margin: -4px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.cloud-management-card__actions {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
 .m3-field--error .m3-field__label--floating {
   color: var(--md-sys-color-error);
 }
@@ -930,6 +987,40 @@ a {
 .local-dashboard__tab-actions {
   margin-top: 10px;
   gap: 6px;
+}
+
+.tab-actions-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+
+.tab-actions-menu__items {
+  position: fixed;
+  z-index: 100;
+  display: grid;
+  width: 240px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  box-shadow: var(--md-sys-elevation-2);
+}
+
+.tab-actions-menu__items .btn {
+  width: 100%;
+  border-radius: var(--radius-xs);
+  text-align: left;
+}
+
+.local-dashboard__tab-url {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .local-dashboard__tab-card + .local-dashboard__tab-card {
