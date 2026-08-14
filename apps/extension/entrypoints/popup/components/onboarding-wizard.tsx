@@ -9,7 +9,7 @@ import {
   type OnboardingStepId,
 } from "@/lib/sync-modes";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
-import { DEFAULT_SERVER_URL, normalizeServerUrl } from "@/lib/server-url";
+import { normalizeServerUrl } from "@/lib/server-url";
 import type { SyncModes } from "@/lib/types";
 import { supportedSyncModes, supportsLanSync } from "@/lib/browser-capabilities";
 
@@ -51,7 +51,7 @@ export function OnboardingWizard({
   );
   const [stepIndex, setStepIndex] = useState(() => resolveInitialStepIndex(snapshot, syncModes));
   const [liveSnapshot, setLiveSnapshot] = useState(snapshot);
-  const [serverUrl, setServerUrl] = useState(snapshot?.serverUrl ?? DEFAULT_SERVER_URL);
+  const [serverUrl, setServerUrl] = useState(snapshot?.serverUrl ?? "");
   const [deviceName, setDeviceName] = useState(snapshot?.deviceName ?? defaultDeviceName());
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -237,7 +237,7 @@ export function OnboardingWizard({
               type="url"
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
-              placeholder={DEFAULT_SERVER_URL}
+              placeholder="https://your-server.example.com"
             />
           </div>
           {error ? <p className="error">{error}</p> : null}

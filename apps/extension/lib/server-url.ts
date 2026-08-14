@@ -1,8 +1,4 @@
-import { env } from "@trackingext/env/extension";
-
 import { getLocalState } from "./storage";
-
-export const DEFAULT_SERVER_URL = env.VITE_SERVER_URL.replace(/\/$/, "");
 
 export function normalizeServerUrl(value: string) {
   const trimmed = value.trim();

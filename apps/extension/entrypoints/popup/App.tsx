@@ -1,7 +1,7 @@
 import { useEffect, useState, useTransition } from "react";
 
 import { displayHostPath } from "@/lib/privacy";
-import { DEFAULT_SERVER_URL, normalizeServerUrl } from "@/lib/server-url";
+import { normalizeServerUrl } from "@/lib/server-url";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import { HistoryView } from "@/components/history-view";
 import { ResumePicker } from "@/components/resume-picker";
@@ -32,7 +32,7 @@ function SettingsView({
   onUpdate: (snapshot: PopupSnapshot) => void;
 }) {
   const [deviceName, setDeviceName] = useState(snapshot.deviceName ?? "");
-  const [serverUrl, setServerUrl] = useState(snapshot.serverUrl ?? DEFAULT_SERVER_URL);
+  const [serverUrl, setServerUrl] = useState(snapshot.serverUrl ?? "");
   const [syncModes, setSyncModes] = useState<SyncModes>(() => supportedSyncModes(snapshot.syncModes));
   const [lanSignalingMode, setLanSignalingMode] = useState<LanSignalingMode>(snapshot.lanSignalingMode);
   const [showPairing, setShowPairing] = useState(false);
@@ -41,7 +41,7 @@ function SettingsView({
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    setServerUrl(snapshot.serverUrl ?? DEFAULT_SERVER_URL);
+    setServerUrl(snapshot.serverUrl ?? "");
     setSyncModes(supportedSyncModes(snapshot.syncModes));
   }, [snapshot.serverUrl, snapshot.syncModes]);
 

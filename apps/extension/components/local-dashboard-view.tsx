@@ -4,7 +4,7 @@ import type { LocalDashboardTab } from "@/lib/open-dashboard";
 import { displayHostPath } from "@/lib/privacy";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import { describeSyncModes, needsServerUrl as needsServerUrlForModes } from "@/lib/sync-modes";
-import { DEFAULT_SERVER_URL, normalizeServerUrl } from "@/lib/server-url";
+import { normalizeServerUrl } from "@/lib/server-url";
 import type { LanSignalingMode, PrivacySettings, SyncModes, TrackedTab } from "@/lib/types";
 import { formatDevice, relativeTime } from "@/lib/view-utils";
 
@@ -322,11 +322,11 @@ function LocalLanPanel({
   setError: (error: string | null) => void;
 }) {
   const [lanSignalingMode, setLanSignalingMode] = useState(snapshot.lanSignalingMode);
-  const [serverUrl, setServerUrl] = useState(snapshot.serverUrl ?? DEFAULT_SERVER_URL);
+  const [serverUrl, setServerUrl] = useState(snapshot.serverUrl ?? "");
   const [, startTransition] = useTransition();
 
   useEffect(() => {
-    setServerUrl(snapshot.serverUrl ?? DEFAULT_SERVER_URL);
+    setServerUrl(snapshot.serverUrl ?? "");
   }, [snapshot.serverUrl]);
 
   const showRelayUrl = needsServerUrlForModes(snapshot.syncModes, lanSignalingMode, snapshot.serverUrl);
@@ -495,7 +495,7 @@ function LocalSettingsPanel({
 }) {
   const [deviceName, setDeviceName] = useState(snapshot.deviceName ?? "");
   const [syncModes, setSyncModes] = useState<SyncModes>(snapshot.syncModes);
-  const [serverUrl, setServerUrl] = useState(snapshot.serverUrl ?? DEFAULT_SERVER_URL);
+  const [serverUrl, setServerUrl] = useState(snapshot.serverUrl ?? "");
   const [excluded, setExcluded] = useState(snapshot.settings.excludedHosts.join("\n"));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
