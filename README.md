@@ -41,6 +41,30 @@ bun run zip:firefox
 
 This repository is a single WXT extension project.
 
+## AMO source review (Firefox)
+
+The listed add-on is built with **WXT** (Vite), which bundles and minifies sources. Reviewers can reproduce the Firefox package from this source archive as follows.
+
+**Environment**
+
+- OS: Linux, macOS, or Windows
+- [Bun](https://bun.sh) **1.3.6** (declared in `package.json` as `packageManager`)
+- No runtime environment variables are required for the Firefox build
+
+**Build steps**
+
+```bash
+bun install --frozen-lockfile
+bun run build:firefox
+```
+
+**Output**
+
+- Built files: `.output/firefox-mv2/`
+- Optional zip: `bun run zip:firefox` → `.output/tabtether-firefox.zip`
+
+The Firefox extension ID in `wxt.config.ts` is `trackingext@trackingext.local`.
+
 ## Privacy
 
 Tethering is explicit. Only tabs the user chooses to tether are stored. Cloud mode sends tethered URLs, page titles, device information, and chosen settings to the database endpoint configured by the user. See [PRIVACY.md](./PRIVACY.md).
