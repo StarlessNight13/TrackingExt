@@ -20,7 +20,15 @@ export default defineConfig({
   test: {
     setupFiles: ["./vitest.setup.ts"],
     include: ["**/*.{test,spec}.{ts,tsx}"],
-    exclude: ["**/node_modules/**", "**/dist/**", "**/.output/**", "**/.wxt/**", "**/coverage/**"],
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.output/**",
+      "**/.wxt/**",
+      "**/coverage/**",
+      "**/e2e/**",
+      "**/*.e2e.ts",
+    ],
     environment: "node",
     globals: false,
     passWithNoTests: false,

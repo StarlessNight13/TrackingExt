@@ -24,11 +24,23 @@ Cloud database settings can export a JSON backup and restore it to the same work
 
 ```bash
 bun install
+bunx playwright install chromium
 bun run dev
 bun run dev:firefox
 bun run check-types
 bun test
+bun run test:e2e
 ```
+
+E2E tests use Playwright against the Chromium MV3 build in `.output/chrome-mv3` (Chromium only).
+
+Chrome Web Store screenshots (1280×800):
+
+```bash
+bun run screenshots
+```
+
+Files land in `store-assets/screenshots/`.
 
 Production builds:
 

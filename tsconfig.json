@@ -4,5 +4,5 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx"
   },
-  "exclude": ["cloudflare-d1"]
+  "exclude": ["cloudflare-d1", "e2e", "scripts"]
 }
