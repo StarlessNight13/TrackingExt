@@ -8,6 +8,7 @@ type TitleBadgeMessage =
   | { type: "SET_TRACKED_TITLE_BADGE"; emoji?: string | null }
   | { type: "CLEAR_TRACKED_TITLE_BADGE" };
 
+let isTracked = false;
 let trackedEmoji: string | null = null;
 let applyingOwnTitleChange = false;
 
@@ -21,13 +22,14 @@ function withOwnTitleChange(nextTitle: string) {
 }
 
 function syncTrackedTitle() {
-  if (!trackedEmoji) return;
+  if (!isTracked) return;
   withOwnTitleChange(addTrackedTabBadge(document.title, trackedEmoji));
 }
 
 function clearTrackedTitle() {
-  if (!trackedEmoji) return;
+  if (!isTracked) return;
   const previousEmoji = trackedEmoji;
+  isTracked = false;
   trackedEmoji = null;
   withOwnTitleChange(stripTrackedTabBadge(document.title, previousEmoji));
 }
@@ -37,7 +39,7 @@ function announceToPage() {
 }
 
 const observer = new MutationObserver(() => {
-  if (applyingOwnTitleChange || !trackedEmoji) return;
+  if (applyingOwnTitleChange || !isTracked) return;
   syncTrackedTitle();
 });
 
@@ -53,6 +55,7 @@ export default defineContentScript({
 
     browser.runtime.onMessage.addListener((message: TitleBadgeMessage) => {
       if (message.type === "SET_TRACKED_TITLE_BADGE") {
+        isTracked = true;
         trackedEmoji = message.emoji?.trim() || null;
         syncTrackedTitle();
         return;
