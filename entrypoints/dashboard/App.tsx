@@ -9,7 +9,6 @@ import type { TrackedTab } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
 import { ExtensionThemeProvider } from "../popup/components/extension-theme-provider";
-import { OnboardingWizard } from "../popup/components/onboarding-wizard";
 
 function readInitialTab() {
   return parseLocalDashboardTab(window.location.hash);
@@ -72,16 +71,6 @@ export default function App() {
       <ExtensionThemeProvider settings={themeSettings}>
         <div className="app app--dashboard">
           <div className="empty">Loading…</div>
-        </div>
-      </ExtensionThemeProvider>
-    );
-  }
-
-  if (!snapshot.onboardingComplete) {
-    return (
-      <ExtensionThemeProvider settings={snapshot.settings}>
-        <div className="app app--dashboard">
-          <OnboardingWizard snapshot={snapshot} onDone={setSnapshot} />
         </div>
       </ExtensionThemeProvider>
     );

@@ -5,6 +5,10 @@ import {
 } from "./settings-constants";
 
 import { DEFAULT_SYNC_MODES } from "./sync-modes";
+import type { SeriesTetherPattern, TetherMode } from "./tether-series";
+
+export type { TetherMode, PageObservation, SeriesTetherPattern } from "./tether-series";
+export { SERIES_LEARNING_NAVIGATIONS, seriesLearningProgress, describeSeriesPattern } from "./tether-series";
 
 export type { DashboardThemeVariant };
 
@@ -56,6 +60,9 @@ export type TrackedTab = {
   createdAt: string;
   archivedAt: string | null;
   isPrivate: boolean;
+  /** loose = same hostname; series = learned URL/title pattern within a series */
+  tetherMode?: TetherMode;
+  seriesPattern?: SeriesTetherPattern;
   revision?: number;
   deletedAt?: string | null;
   activeDevice: { id: string; name: string; browser: string; lastSeenAt?: string } | null;
@@ -125,7 +132,7 @@ export const DEFAULT_LOCAL_STATE: LocalState = {
   localDeviceId: null,
   syncModes: DEFAULT_SYNC_MODES,
   lanSignalingMode: "local",
-  onboardingComplete: false,
+  onboardingComplete: true,
   pairedLanDevices: [],
   localHistory: {},
   bindings: {},

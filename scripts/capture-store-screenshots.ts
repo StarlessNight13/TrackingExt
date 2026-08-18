@@ -51,13 +51,9 @@ async function launchExtension() {
   return { context, serviceWorker, extensionId, userDataDir };
 }
 
-async function completeOnboarding(page: Page) {
+async function waitForPopupReady(page: Page) {
   await page.getByRole("heading", { name: "TabTether" }).waitFor();
-  const getStarted = page.getByRole("button", { name: "Get started" });
-  if (await getStarted.isVisible().catch(() => false)) {
-    await getStarted.click();
-    await getStarted.waitFor({ state: "detached" });
-  }
+  await page.getByRole("heading", { name: "Current page" }).waitFor();
 }
 
 async function sendMessage(page: Page, message: Record<string, unknown>) {
@@ -163,7 +159,7 @@ async function captureSeededShots() {
   try {
     const popup = await context.newPage();
     await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-    await completeOnboarding(popup);
+    await waitForPopupReady(popup);
 
     const sites = [
       { url: "https://example.com/", prefix: "https://example.com", name: "Example Domain" },
@@ -222,29 +218,9 @@ async function captureSeededShots() {
   }
 }
 
-async function captureOnboardingShot() {
-  const { context, extensionId, userDataDir } = await launchExtension();
-  try {
-    const onboard = await context.newPage();
-    await onboard.goto(`chrome-extension://${extensionId}/popup.html`);
-    await onboard.getByRole("button", { name: "Get started" }).waitFor();
-    const onboardShot = await onboard.locator(".app").screenshot({ type: "png" });
-    await composePopupShot(
-      context,
-      onboardShot,
-      path.join(outDir, "05-onboarding.png"),
-      "Start local — connect a cloud database only if you want",
-    );
-  } finally {
-    await context.close();
-    fs.rmSync(userDataDir, { recursive: true, force: true });
-  }
-}
-
 async function main() {
   fs.mkdirSync(outDir, { recursive: true });
   await captureSeededShots();
-  await captureOnboardingShot();
   console.log(`\nDone. Upload PNGs from:\n  ${outDir}`);
 }
 

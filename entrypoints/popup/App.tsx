@@ -4,9 +4,11 @@ import { displayHostPath } from "@/lib/privacy";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import { HistoryView } from "@/components/history-view";
 import { ResumePicker } from "@/components/resume-picker";
+import { SeriesTetherPanel } from "@/components/series-tether-panel";
 import { openDashboard } from "@/lib/open-dashboard";
 import { describeSyncModes } from "@/lib/sync-modes";
-import type { PrivacySettings, SyncModes, TrackedTab } from "@/lib/types";
+import type { PrivacySettings, SyncModes, TrackedTab, TetherMode } from "@/lib/types";
+import { seriesLearningProgress } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import { supportedSyncModes, supportsLanSync } from "@/lib/browser-capabilities";
 import { formatDevice, relativeTime } from "@/lib/view-utils";
@@ -16,7 +18,6 @@ import { IconSettings } from "./components/icons";
 import { LanPairingPanel } from "./components/lan-pairing-panel";
 import { M3SwitchRow } from "./components/m3-switch";
 import { M3TextArea, M3TextField } from "./components/m3-text-field";
-import { OnboardingWizard } from "./components/onboarding-wizard";
 
 type View = "main" | "settings" | "history" | "resume";
 
@@ -161,7 +162,7 @@ function SettingsView({
           </p>
           {snapshot.pairedLanDevices.length === 0 ? (
             <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-              No paired devices. Use onboarding or pair from another browser.
+              No paired devices. Pair from another browser using a token below.
             </p>
           ) : (
             <div className="list compact-list">
@@ -301,11 +302,15 @@ function MainView({
   onOpenResume: () => void;
 }) {
   const [name, setName] = useState("");
+  const [tetherMode, setTetherMode] = useState<TetherMode>("loose");
+  const [showSeriesPanel, setShowSeriesPanel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const current = snapshot.currentTab;
   const tracked = current?.tracked ?? null;
-  const otherTabs = snapshot.trackedTabs.filter((t) => t.id !== tracked?.id).slice(0, 12);
+  const boundCount = tracked ? (snapshot.boundTabCounts[tracked.id] ?? 0) : 0;
+  const tetheredOpenTabs = snapshot.openTabs.filter((tab) => tab.tracked);
+  const untetheredOpenTabs = snapshot.openTabs.filter((tab) => !tab.tracked);
 
   useEffect(() => {
     setName(tracked?.name ?? current?.title ?? "");
@@ -323,6 +328,7 @@ function MainView({
   };
 
   const canTrack = Boolean(current && !tracked);
+  const seriesProgress = seriesLearningProgress(tracked?.seriesPattern);
   const lanSummary =
     snapshot.syncModes.lan && snapshot.pairedLanDevices.length > 0
       ? `${snapshot.lanConnectedPeers}/${snapshot.pairedLanDevices.length} LAN peers online`
@@ -434,8 +440,29 @@ function MainView({
             <div className="status-row">
               <span className="status-dot" />
               Tethered
+              {tracked.tetherMode === "series" ? <span className="pill">Series</span> : null}
               {!current.isActiveOwner ? <span className="pill">owned elsewhere</span> : null}
             </div>
+            {boundCount > 1 ? (
+              <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+                {boundCount} browser tabs are linked to this activity.
+              </p>
+            ) : null}
+            {tracked.tetherMode === "series" && seriesProgress ? (
+              <p className="muted series-tether-notice" style={{ margin: 0, fontSize: 11 }}>
+                Learning this series ({seriesProgress.current}/{seriesProgress.required} page
+                changes). Stay on the same series while TabTether learns the pattern.
+              </p>
+            ) : null}
+            {tracked.tetherMode === "series" && tracked.seriesPattern?.status === "ready" ? (
+              <p className="muted series-tether-notice" style={{ margin: 0, fontSize: 11 }}>
+                Series pattern active
+                {tracked.seriesPattern.stableTokens.length
+                  ? `: ${tracked.seriesPattern.stableTokens[0]}`
+                  : ""}
+                . Off-series pages will not update this tether.
+              </p>
+            ) : null}
             <M3TextField id="tracked-name" label="Name" value={name} onChange={setName} />
             <p className="url">{displayHostPath(tracked.currentUrl)}</p>
             <p className="muted" style={{ margin: 0, fontSize: 11 }}>
@@ -485,22 +512,78 @@ function MainView({
                 History
               </button>
               <button
-                className="btn danger"
+                className="btn secondary"
                 disabled={pending}
-                onClick={() =>
-                  run(async () => {
-                    const res = await sendMessage({
-                      type: "STOP_TRACKING",
-                      trackedTabId: tracked.id,
-                    });
-                    if (!res.ok) throw new Error(res.error);
-                    if (res.snapshot) onUpdate(res.snapshot);
-                  })
-                }
+                onClick={() => setShowSeriesPanel((value) => !value)}
               >
-                Untether tab
+                {showSeriesPanel ? "Hide series pattern" : "Series pattern"}
               </button>
+              <button
+                className="btn secondary"
+                disabled={pending}
+                onClick={() => openDashboard(snapshot, "tabs")}
+              >
+                Dashboard
+              </button>
+              {boundCount > 1 ? (
+                <button
+                  className="btn danger"
+                  disabled={pending}
+                  onClick={() =>
+                    run(async () => {
+                      const res = await sendMessage({ type: "UNBIND_TAB" });
+                      if (!res.ok) throw new Error(res.error);
+                      if (res.snapshot) onUpdate(res.snapshot);
+                    })
+                  }
+                >
+                  Untether this tab
+                </button>
+              ) : (
+                <button
+                  className="btn danger"
+                  disabled={pending}
+                  onClick={() =>
+                    run(async () => {
+                      const res = await sendMessage({
+                        type: "STOP_TRACKING",
+                        trackedTabId: tracked.id,
+                      });
+                      if (!res.ok) throw new Error(res.error);
+                      if (res.snapshot) onUpdate(res.snapshot);
+                    })
+                  }
+                >
+                  Untether tab
+                </button>
+              )}
+              {boundCount > 1 ? (
+                <button
+                  className="btn danger"
+                  disabled={pending}
+                  onClick={() =>
+                    run(async () => {
+                      const res = await sendMessage({
+                        type: "STOP_TRACKING",
+                        trackedTabId: tracked.id,
+                      });
+                      if (!res.ok) throw new Error(res.error);
+                      if (res.snapshot) onUpdate(res.snapshot);
+                    })
+                  }
+                >
+                  Delete activity
+                </button>
+              ) : null}
             </div>
+            {showSeriesPanel ? (
+              <SeriesTetherPanel
+                key={`${tracked.id}-${tracked.lastUpdatedAt}`}
+                tracked={tracked}
+                compact
+                onUpdate={onUpdate}
+              />
+            ) : null}
           </div>
         ) : (
           <div className="panel stack">
@@ -515,6 +598,35 @@ function MainView({
               onChange={setName}
               placeholder="e.g. Novel, Research notes"
             />
+            <div className="provider-choice" role="group" aria-label="Tether mode">
+              <span className="provider-choice__label">Tether mode</span>
+              <button
+                className={`provider-choice__option${tetherMode === "loose" ? " provider-choice__option--selected" : ""}`}
+                type="button"
+                aria-pressed={tetherMode === "loose"}
+                onClick={() => setTetherMode("loose")}
+              >
+                Loose
+              </button>
+              <button
+                className={`provider-choice__option${tetherMode === "series" ? " provider-choice__option--selected" : ""}`}
+                type="button"
+                aria-pressed={tetherMode === "series"}
+                onClick={() => setTetherMode("series")}
+              >
+                Series
+              </button>
+            </div>
+            {tetherMode === "loose" ? (
+              <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+                Loose tether follows any page on the same website.
+              </p>
+            ) : (
+              <p className="muted series-tether-notice" style={{ margin: 0, fontSize: 11 }}>
+                Series tether learns what stays the same across pages. Stay on the same series;
+                after 3 page changes TabTether builds a regex from the repeating URL/title parts.
+              </p>
+            )}
             <button
               className="btn block track-cta"
               disabled={pending || !canTrack}
@@ -523,22 +635,97 @@ function MainView({
                   const res = await sendMessage({
                     type: "TRACK_TAB",
                     name: name.trim() || undefined,
+                    tetherMode,
                   });
                   if (!res.ok) throw new Error(res.error);
                   if (res.snapshot) onUpdate(res.snapshot);
                 })
               }
             >
-              {pending ? "Tethering…" : "Tether this tab"}
+              {pending
+                ? "Tethering…"
+                : tetherMode === "series"
+                  ? "Tether this series"
+                  : "Tether this tab"}
             </button>
+            {canTrack && snapshot.trackedTabs.length > 0 ? (
+              <div className="stack">
+                <span className="muted" style={{ margin: 0, fontSize: 11 }}>
+                  Or link this tab to an existing activity:
+                </span>
+                <div className="list compact-list">
+                  {snapshot.trackedTabs.map((activity) => (
+                    <button
+                      key={activity.id}
+                      className="list-item"
+                      disabled={pending}
+                      onClick={() =>
+                        run(async () => {
+                          const res = await sendMessage({
+                            type: "BIND_TAB",
+                            trackedTabId: activity.id,
+                          });
+                          if (!res.ok) throw new Error(res.error);
+                          if (res.snapshot) onUpdate(res.snapshot);
+                        })
+                      }
+                    >
+                      <span className="name">
+                        {activity.emoji ? `${activity.emoji} ` : ""}
+                        {activity.name}
+                      </span>
+                      <span className="sub">{displayHostPath(activity.currentUrl)}</span>
+                      {(snapshot.boundTabCounts[activity.id] ?? 0) > 0 ? (
+                        <span className="sub">
+                          {snapshot.boundTabCounts[activity.id]} tab
+                          {snapshot.boundTabCounts[activity.id] === 1 ? "" : "s"} open
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>
 
+      {snapshot.openTabs.length > 0 ? (
+        <div className="section">
+          <h2 className="section-title">Tabs in this window</h2>
+          <div className="list compact-list">
+            {snapshot.openTabs.map((tab) => (
+              <div
+                key={tab.tabId}
+                className={`list-item window-tab-item${tab.active ? " current" : ""}`}
+                style={{ cursor: "default" }}
+              >
+                <div className="row wrap" style={{ justifyContent: "space-between", gap: 8 }}>
+                  <span className="name">{tab.title || "Untitled page"}</span>
+                  {tab.active ? <span className="pill">Active</span> : null}
+                  {tab.tracked ? <span className="pill">Tethered</span> : null}
+                </div>
+                <span className="sub">{displayHostPath(tab.url)}</span>
+                {tab.tracked ? (
+                  <span className="sub">
+                    {tab.tracked.emoji ? `${tab.tracked.emoji} ` : ""}
+                    {tab.tracked.name}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+            {tetheredOpenTabs.length} tethered · {untetheredOpenTabs.length} untethered in this
+            window
+          </p>
+        </div>
+      ) : null}
+
       <div className="section">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <h2 className="section-title" style={{ margin: 0 }}>
-            Tethered tabs
+            All activities
           </h2>
           {snapshot.trackedTabs.length > 0 ? (
             <button className="btn secondary" type="button" onClick={onOpenResume}>
@@ -546,14 +733,14 @@ function MainView({
             </button>
           ) : null}
         </div>
-        {otherTabs.length === 0 ? (
-          <div className="empty">{tracked ? "No other tethered tabs." : "No tethered tabs yet."}</div>
+        {snapshot.trackedTabs.length === 0 ? (
+          <div className="empty">No tethered activities yet.</div>
         ) : (
           <div className="list compact-list">
-            {otherTabs.map((tab) => (
+            {snapshot.trackedTabs.map((tab) => (
               <button
                 key={tab.id}
-                className="list-item"
+                className={`list-item${tracked?.id === tab.id ? " current" : ""}`}
                 disabled={pending}
                 title="Resume on this device (open & take over)"
                 onClick={() =>
@@ -572,10 +759,14 @@ function MainView({
                 <span className="name">
                   {tab.emoji ? `${tab.emoji} ` : ""}
                   {tab.name}
+                  {tracked?.id === tab.id ? " (current page)" : ""}
                 </span>
                 <span className="sub">{tab.currentTitle || displayHostPath(tab.currentUrl)}</span>
                 <span className="sub">
-                  Resume · {formatDevice(tab)} · {relativeTime(tab.lastUpdatedAt)}
+                  {(snapshot.boundTabCounts[tab.id] ?? 0) > 0
+                    ? `${snapshot.boundTabCounts[tab.id]} tab${snapshot.boundTabCounts[tab.id] === 1 ? "" : "s"} open · `
+                    : ""}
+                  {formatDevice(tab)} · {relativeTime(tab.lastUpdatedAt)}
                 </span>
               </button>
             ))}
@@ -631,9 +822,7 @@ function App() {
   return (
     <ExtensionThemeProvider settings={snapshot.settings}>
       <div className="app">
-        {!snapshot.onboardingComplete ? (
-          <OnboardingWizard snapshot={snapshot} onDone={setSnapshot} />
-        ) : view === "settings" ? (
+        {view === "settings" ? (
           <SettingsView snapshot={snapshot} onBack={() => setView("main")} onUpdate={setSnapshot} />
         ) : view === "history" && historyTab ? (
           <HistoryPanel

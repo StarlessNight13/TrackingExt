@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 
+import { isFirefoxFamily } from "../lib/browser-capabilities";
 import { sendMessage, type PopupSnapshot } from "../lib/messaging";
 import { M3Button } from "../entrypoints/popup/components/m3-button";
 import { M3SwitchRow } from "../entrypoints/popup/components/m3-switch";
@@ -8,16 +9,12 @@ import { DEFAULT_DATABASE_BEHAVIOR, type DatabaseBehavior } from "../services/da
 import type { DatabaseProvider } from "../services/database-service";
 import type { DatabaseLog } from "../storage/indexed-db";
 
-async function requestCloudConsent() {
-  const permissions = (await browser.permissions.getAll()) as { data_collection?: string[] };
-  if (!permissions.data_collection) return true;
-  if (
-    ["browsingActivity", "websiteContent", "technicalAndInteraction"].every((permission) =>
-      permissions.data_collection?.includes(permission),
-    )
-  ) {
-    return true;
+/** Must be invoked synchronously from a click handler (not inside startTransition). */
+function requestCloudConsent(): Promise<boolean> {
+  if (!isFirefoxFamily || typeof browser.permissions?.request !== "function") {
+    return Promise.resolve(true);
   }
+
   return browser.permissions.request({
     data_collection: ["browsingActivity", "websiteContent", "technicalAndInteraction"],
   } as Parameters<typeof browser.permissions.request>[0]);
@@ -68,22 +65,38 @@ export function CloudDatabasePanel({
     });
   };
 
-  const connect = () =>
-    run(async () => {
-      if (!(await requestCloudConsent()))
-        throw new Error("Cloud data transmission was not allowed");
-      const response = await sendMessage({
-        type: "CONFIGURE_CLOUD_DATABASE",
-        url,
-        authToken: token,
-        provider,
-        tokenPersistence: persistent ? "persistent" : "session",
-        deviceName: snapshot.deviceName ?? "Browser",
+  const connect = () => {
+    setError(null);
+    void requestCloudConsent()
+      .then((granted) => {
+        if (!granted) {
+          setError("Cloud data transmission was not allowed");
+          return;
+        }
+        startTransition(async () => {
+          try {
+            const response = await sendMessage({
+              type: "CONFIGURE_CLOUD_DATABASE",
+              url,
+              authToken: token,
+              provider,
+              tokenPersistence: persistent ? "persistent" : "session",
+              deviceName: snapshot.deviceName ?? "Browser",
+            });
+            if (!response.ok) throw new Error(response.error);
+            setToken("");
+            if (response.snapshot) onUpdate(response.snapshot);
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : "Cloud database action failed");
+          }
+        });
+      })
+      .catch((cause) => {
+        setError(
+          cause instanceof Error ? cause.message : "Cloud data transmission was not allowed",
+        );
       });
-      if (!response.ok) throw new Error(response.error);
-      setToken("");
-      if (response.snapshot) onUpdate(response.snapshot);
-    });
+  };
 
   const sync = () =>
     run(async () => {

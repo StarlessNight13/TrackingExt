@@ -95,6 +95,52 @@ html.extension-popup #root {
   width: 320px;
 }
 
+html.extension-fullpage,
+html.extension-fullpage body,
+html.extension-fullpage #root {
+  max-width: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+}
+
+html.extension-fullpage body {
+  min-height: 100dvh;
+}
+
+html.extension-fullpage .app {
+  width: 100%;
+  max-width: none;
+  min-height: 100dvh;
+  box-sizing: border-box;
+}
+
+html.extension-fullpage.extension-popup .app {
+  padding: clamp(16px, 3vw, 24px) clamp(16px, 4vw, 32px) 32px;
+}
+
+html.extension-fullpage .local-dashboard,
+html.extension-fullpage .local-dashboard__tabs,
+html.extension-fullpage .list,
+html.extension-fullpage .compact-list,
+html.extension-fullpage .stack {
+  width: 100%;
+}
+
+html.extension-fullpage .local-dashboard__tabs {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+html.extension-fullpage .local-dashboard__tab {
+  flex: 0 1 auto;
+  white-space: nowrap;
+}
+
+html.extension-fullpage .cloud-management-card {
+  width: 100%;
+}
+
 html,
 body,
 #root {
@@ -342,6 +388,14 @@ a {
   gap: 6px;
 }
 
+.window-tab-item {
+  cursor: default;
+}
+
+.window-tab-item.current {
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--line));
+}
+
 .list-item {
   display: flex;
   flex-direction: column;
@@ -505,10 +559,6 @@ a {
 .m3-switch:focus-visible .m3-switch__track {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
-}
-
-.onboarding-progress {
-  letter-spacing: 0.02em;
 }
 
 .pairing-error {
@@ -748,6 +798,20 @@ a {
 .m3-field__select {
   appearance: none;
   cursor: pointer;
+}
+
+.series-tether-panel--compact {
+  margin-top: 8px;
+  padding: 12px;
+  gap: 10px;
+}
+
+.series-tether-notice {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in oklch, var(--primary) 35%, var(--line));
+  background: color-mix(in oklch, var(--primary) 8%, var(--paper));
+  line-height: 1.45;
 }
 
 .provider-choice {

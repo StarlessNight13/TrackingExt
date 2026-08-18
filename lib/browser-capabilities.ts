@@ -6,6 +6,8 @@ import type { SyncModes } from "./types";
 export const isFirefoxFamily =
   import.meta.env.BROWSER === "firefox" || import.meta.env.BROWSER === "firefox-android";
 
+export const isFirefoxAndroid = import.meta.env.BROWSER === "firefox-android";
+
 export const supportsLanSync = !isFirefoxFamily;
 
 export function supportedSyncModes(syncModes: SyncModes): SyncModes {

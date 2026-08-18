@@ -44,8 +44,8 @@ function migrateLegacyState(stored: Record<string, unknown>): Partial<LocalState
     patch.syncModes = DEFAULT_LOCAL_STATE.syncModes;
   }
 
-  if (stored.onboardingComplete === undefined && patch.onboardingComplete === undefined) {
-    patch.onboardingComplete = false;
+  if (stored.onboardingComplete !== true) {
+    patch.onboardingComplete = true;
   }
 
   if (stored.pairedLanDevices === undefined) {

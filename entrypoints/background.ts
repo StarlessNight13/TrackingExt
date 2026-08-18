@@ -19,6 +19,7 @@ import { supportedSyncModes, supportsLanSync } from "../lib/browser-capabilities
 import { stripTrackedTabBadge } from "../lib/title-badge";
 import {
   canUseTrackingFeatures,
+  bindTabToActivity,
   confirmReconnect,
   dismissReconnect,
   handleTabRemoved,
@@ -29,6 +30,8 @@ import {
   stopTracking,
   trackCurrentTab,
   takeOver,
+  unbindTab,
+  updateSeriesTether,
 } from "../lib/tracking";
 import { runCloudDatabaseSpike } from "../lib/cloud-db/spike";
 import { syncCloudDatabase } from "../sync/cloud-sync";
@@ -83,11 +86,12 @@ async function disableUnsupportedLanSync() {
 
 async function buildSnapshot(): Promise<PopupSnapshot> {
   const state = await getLocalState();
-  const [effectiveDeviceId, lanStatus, activeTabs, cloud, cloudStore, cloudTabs] =
+  const [effectiveDeviceId, lanStatus, activeTabs, windowTabs, cloud, cloudStore, cloudTabs] =
     await Promise.all([
       getEffectiveDeviceId(),
       getLanStatusFromOffscreen(state.pairedLanDevices.map((device) => device.deviceId)),
       browser.tabs.query({ active: true, currentWindow: true }),
+      browser.tabs.query({ currentWindow: true }),
       getCloudSummary(),
       getSyncStoreSummary(),
       listCachedTabs(),
@@ -97,6 +101,26 @@ async function buildSnapshot(): Promise<PopupSnapshot> {
     : state.cachedTabs;
   const [active] = activeTabs;
   let currentTab: PopupSnapshot["currentTab"] = null;
+
+  const boundTabCounts: Record<string, number> = {};
+  for (const binding of Object.values(state.bindings)) {
+    boundTabCounts[binding] = (boundTabCounts[binding] ?? 0) + 1;
+  }
+
+  const openTabs: PopupSnapshot["openTabs"] = [];
+  for (const tab of windowTabs) {
+    if (tab.id === undefined || !isTrackableUrl(tab.url)) continue;
+    const trackedId = state.bindings[String(tab.id)];
+    const tracked = trackedId ? (displayedTabs.find((entry) => entry.id === trackedId) ?? null) : null;
+    const visibleTitle = stripTrackedTabBadge(tab.title ?? "", tracked?.emoji) ?? tab.title ?? "";
+    openTabs.push({
+      tabId: tab.id,
+      url: tab.url!,
+      title: visibleTitle,
+      active: tab.active ?? false,
+      tracked,
+    });
+  }
 
   if (active?.id !== undefined && isTrackableUrl(active.url)) {
     const trackedId = state.bindings[String(active.id)];
@@ -121,6 +145,8 @@ async function buildSnapshot(): Promise<PopupSnapshot> {
     lanConnectedPeers: lanStatus.openChannelCount,
     lanPeerStatus: lanStatus.peerStatus,
     currentTab,
+    openTabs,
+    boundTabCounts,
     trackedTabs: displayedTabs,
     pendingReconnect: state.pendingReconnect,
     pendingSyncCount: Object.keys(state.queuedLocationUpdates).length,
@@ -157,7 +183,29 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
           tabId = active?.id;
         }
         if (tabId === undefined) throw new Error("No active tab");
-        await trackCurrentTab(tabId, message.name, message.emoji);
+        await trackCurrentTab(tabId, message.name, message.emoji, message.tetherMode, message.trackedTabId);
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "BIND_TAB": {
+        let tabId = message.tabId;
+        if (tabId === undefined) {
+          const [active] = await browser.tabs.query({ active: true, currentWindow: true });
+          tabId = active?.id;
+        }
+        if (tabId === undefined) throw new Error("No active tab");
+        await bindTabToActivity(tabId, message.trackedTabId);
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "UNBIND_TAB": {
+        let tabId = message.tabId;
+        if (tabId === undefined) {
+          const [active] = await browser.tabs.query({ active: true, currentWindow: true });
+          tabId = active?.id;
+        }
+        if (tabId === undefined) throw new Error("No active tab");
+        await unbindTab(tabId);
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
@@ -168,6 +216,11 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 
       case "RENAME_TAB": {
         await renameTrackedTab(message.trackedTabId, message.name, message.emoji);
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "UPDATE_SERIES_TETHER": {
+        await updateSeriesTether(message);
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
@@ -233,27 +286,6 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 
       case "RENAME_DEVICE": {
         await renameDevice(message.name);
-        return { ok: true, snapshot: await buildSnapshot() };
-      }
-
-      case "COMPLETE_ONBOARDING": {
-        if (!isValidSyncModes(message.syncModes)) {
-          throw new Error("Select at least one sync mode");
-        }
-        await ensureLocalDeviceId();
-        await setLocalState({
-          syncModes: message.syncModes,
-          lanSignalingMode: resolveLanSignalingMode(),
-          deviceName: message.deviceName.trim() || defaultDeviceName(),
-          onboardingComplete: message.markComplete !== false,
-        });
-        await syncLanManagerViaOffscreen();
-        return { ok: true, snapshot: await buildSnapshot() };
-      }
-
-      case "FINISH_ONBOARDING": {
-        await setLocalState({ onboardingComplete: true });
-        await syncLanManagerViaOffscreen();
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
@@ -502,7 +534,7 @@ async function startLanSyncIfEnabled() {
   if (!supportsLanSync) return;
   try {
     const state = await getLocalState();
-    if (!state.syncModes.lan || !state.onboardingComplete) return;
+    if (!state.syncModes.lan) return;
     await syncLanManagerViaOffscreen();
   } catch (error) {
     console.warn("[TabTether] LAN sync startup failed:", error);

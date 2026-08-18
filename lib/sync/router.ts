@@ -1,4 +1,5 @@
 import type { TrackedTab } from "../types";
+import type { SeriesTetherPattern, TetherMode } from "../tether-series";
 import { getEffectiveDeviceId, getEffectiveDeviceName } from "../local-device";
 import { getLocalState, setLocalState } from "../storage";
 import {
@@ -8,6 +9,8 @@ import {
   renameOfflineTab,
   takeOverOfflineTab,
   updateOfflineTabLocation,
+  updateOfflineTabSeriesPattern,
+  updateOfflineTabTether,
 } from "./offline-store";
 import { broadcastLanTabEvent } from "../lan-sync/broadcast";
 import { getCloudCredentials } from "../../storage/cloud-configuration";
@@ -44,6 +47,8 @@ export async function syncCreateTab(input: {
   emoji?: string | null;
   url: string;
   title?: string | null;
+  tetherMode?: TetherMode;
+  seriesPattern?: SeriesTetherPattern;
 }): Promise<TrackedTab> {
   const state = await getLocalState();
   if (await getCloudCredentials()) {
@@ -64,6 +69,8 @@ export async function syncCreateTab(input: {
       emoji: input.emoji,
       url: input.url,
       title: input.title,
+      tetherMode: input.tetherMode,
+      seriesPattern: input.seriesPattern,
     });
   }
 
@@ -113,6 +120,53 @@ export async function syncUpdateTabLocation(input: {
     void broadcastLanTabEvent({ type: "tab_updated", tab });
   }
 
+  return tab;
+}
+
+export async function syncUpdateTabSeriesPattern(input: {
+  tabId: string;
+  seriesPattern: SeriesTetherPattern;
+}): Promise<TrackedTab | null> {
+  if (await getCloudCredentials()) {
+    const state = await getLocalState();
+    return state.cachedTabs.find((tab) => tab.id === input.tabId) ?? null;
+  }
+
+  const tab = await updateOfflineTabSeriesPattern(input);
+  const state = await getLocalState();
+  if (tab && state.syncModes.lan) {
+    void broadcastLanTabEvent({ type: "tab_updated", tab });
+  }
+  return tab;
+}
+
+export async function syncUpdateTabTether(input: {
+  tabId: string;
+  tetherMode: TetherMode;
+  seriesPattern?: SeriesTetherPattern;
+}): Promise<TrackedTab | null> {
+  if (await getCloudCredentials()) {
+    const state = await getLocalState();
+    const existing = state.cachedTabs.find((tab) => tab.id === input.tabId);
+    if (!existing) return null;
+    const updated: TrackedTab = {
+      ...existing,
+      tetherMode: input.tetherMode,
+      seriesPattern: input.seriesPattern,
+      lastUpdatedAt: new Date().toISOString(),
+    };
+    await setLocalState({
+      cachedTabs: state.cachedTabs.map((tab) => (tab.id === input.tabId ? updated : tab)),
+    });
+    if (state.syncModes.lan) void broadcastLanTabEvent({ type: "tab_updated", tab: updated });
+    return updated;
+  }
+
+  const tab = await updateOfflineTabTether(input);
+  const state = await getLocalState();
+  if (tab && state.syncModes.lan) {
+    void broadcastLanTabEvent({ type: "tab_updated", tab });
+  }
   return tab;
 }
 

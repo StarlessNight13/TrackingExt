@@ -5,10 +5,12 @@ import type { LocalDashboardTab } from "@/lib/open-dashboard";
 import { displayHostPath } from "@/lib/privacy";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import { describeSyncModes } from "@/lib/sync-modes";
+import { describeSeriesPattern } from "@/lib/types";
 import type { PrivacySettings, SyncModes, TrackedTab } from "@/lib/types";
 import { formatDevice, relativeTime } from "@/lib/view-utils";
 import { CloudDatabasePanel } from "./cloud-database-panel";
 import { CloudManagementPanel } from "./cloud-management-panel";
+import { SeriesTetherPanel } from "./series-tether-panel";
 
 import { LanPairingPanel } from "../entrypoints/popup/components/lan-pairing-panel";
 import { M3Button } from "../entrypoints/popup/components/m3-button";
@@ -232,6 +234,7 @@ function LocalTabsPanel({
   fullPage: boolean;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [seriesPanelId, setSeriesPanelId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
   const startEdit = (tracked: TrackedTab) => {
@@ -284,10 +287,18 @@ function LocalTabsPanel({
                       {tracked.emoji ? `${tracked.emoji} ` : ""}
                       {tracked.name}
                     </span>
-                    {tracked.activeDevice ? (
-                      <span className="pill">{tracked.activeDevice.name}</span>
-                    ) : null}
+                    <div className="row wrap" style={{ gap: 6 }}>
+                      {tracked.tetherMode === "series" ? <span className="pill">Series</span> : null}
+                      {tracked.activeDevice ? (
+                        <span className="pill">{tracked.activeDevice.name}</span>
+                      ) : null}
+                    </div>
                   </div>
+                  {tracked.tetherMode === "series" ? (
+                    <p className="muted" style={{ margin: "4px 0 0", fontSize: 11 }}>
+                      {describeSeriesPattern(tracked.seriesPattern)}
+                    </p>
+                  ) : null}
                   {tracked.currentTitle ? (
                     <p className="sub" style={{ margin: "4px 0 0" }}>
                       {tracked.currentTitle}
@@ -298,6 +309,9 @@ function LocalTabsPanel({
                   </p>
                   <p className="muted" style={{ margin: "4px 0 0", fontSize: 11 }}>
                     {formatDevice(tracked)} · {relativeTime(tracked.lastUpdatedAt)}
+                    {(snapshot.boundTabCounts[tracked.id] ?? 0) > 0
+                      ? ` · ${snapshot.boundTabCounts[tracked.id]} browser tab${snapshot.boundTabCounts[tracked.id] === 1 ? "" : "s"} open`
+                      : ""}
                   </p>
                 </>
               )}
@@ -380,6 +394,15 @@ function LocalTabsPanel({
                           </button>
                         ) : null}
                         <button
+                          className="btn ghost"
+                          disabled={pending}
+                          onClick={() =>
+                            setSeriesPanelId((current) => (current === tracked.id ? null : tracked.id))
+                          }
+                        >
+                          {seriesPanelId === tracked.id ? "Hide series pattern" : "Series pattern"}
+                        </button>
+                        <button
                           className="btn danger"
                           disabled={pending}
                           onClick={() =>
@@ -399,6 +422,15 @@ function LocalTabsPanel({
                   </>
                 )}
               </div>
+
+              {seriesPanelId === tracked.id ? (
+                <SeriesTetherPanel
+                  key={`${tracked.id}-${tracked.lastUpdatedAt}`}
+                  tracked={tracked}
+                  compact
+                  onUpdate={onUpdate}
+                />
+              ) : null}
             </div>
           ))}
         </div>

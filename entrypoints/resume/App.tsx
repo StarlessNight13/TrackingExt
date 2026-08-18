@@ -43,16 +43,6 @@ export default function App() {
     );
   }
 
-  if (!snapshot.onboardingComplete) {
-    return (
-      <ExtensionThemeProvider settings={themeSettings}>
-        <div className="app">
-          <div className="empty">Finish extension setup before resuming activities.</div>
-        </div>
-      </ExtensionThemeProvider>
-    );
-  }
-
   return (
     <ExtensionThemeProvider settings={snapshot.settings}>
       <div className="app" style={{ maxWidth: 420, margin: "0 auto" }}>

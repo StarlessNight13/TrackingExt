@@ -15,7 +15,12 @@ html.extension-dashboard #root {
   margin: 0;
   padding: 24px clamp(16px, 3vw, 40px) 48px;
   min-height: 100vh;
+  min-height: 100dvh;
   box-sizing: border-box;
+}
+
+html.extension-fullpage .app--dashboard {
+  min-height: 100dvh;
 }
 
 .app--dashboard-narrow {

@@ -2,16 +2,9 @@ import type { Page, Worker } from "@playwright/test";
 
 import { expect } from "./fixtures";
 
-/** Complete first-run onboarding when the wizard is shown. */
-export async function completeOnboarding(popup: Page) {
+/** Wait for the popup UI to finish loading. */
+export async function waitForPopupReady(popup: Page) {
   await expect(popup.getByRole("heading", { name: "TabTether" })).toBeVisible();
-
-  const getStarted = popup.getByRole("button", { name: "Get started" });
-  if (await getStarted.isVisible().catch(() => false)) {
-    await getStarted.click();
-    await expect(getStarted).toHaveCount(0);
-  }
-
   await expect(popup.getByRole("heading", { name: "Current page" })).toBeVisible();
 }
 

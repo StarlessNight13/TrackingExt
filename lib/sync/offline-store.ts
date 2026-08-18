@@ -1,4 +1,6 @@
 import type { HistoryEntry, TrackedTab } from "../types";
+import type { SeriesTetherPattern, TetherMode } from "../tether-series";
+import { defaultTetherMode } from "../tether-series";
 import { buildLocalDeviceRef } from "../local-device";
 import { detectBrowser } from "../device";
 import { getLocalState, setLocalState } from "../storage";
@@ -27,6 +29,8 @@ export async function createOfflineTab(input: {
   emoji?: string | null;
   url: string;
   title?: string | null;
+  tetherMode?: TetherMode;
+  seriesPattern?: SeriesTetherPattern;
 }): Promise<TrackedTab> {
   const now = nowIso();
   const tab: TrackedTab = {
@@ -44,6 +48,8 @@ export async function createOfflineTab(input: {
     createdAt: now,
     archivedAt: null,
     isPrivate: false,
+    tetherMode: input.tetherMode ?? defaultTetherMode(),
+    seriesPattern: input.seriesPattern,
     activeDevice: buildLocalDeviceRef(input.deviceId, input.deviceName),
     lastUpdatedDevice: buildLocalDeviceRef(input.deviceId, input.deviceName),
   };
@@ -116,6 +122,51 @@ export async function updateOfflineTabLocation(input: {
   await setLocalState({
     cachedTabs: state.cachedTabs.map((t) => (t.id === input.tabId ? updated : t)),
     localHistory: history,
+  });
+
+  return updated;
+}
+
+export async function updateOfflineTabSeriesPattern(input: {
+  tabId: string;
+  seriesPattern: SeriesTetherPattern;
+}): Promise<TrackedTab | null> {
+  const state = await getLocalState();
+  const tab = state.cachedTabs.find((t) => t.id === input.tabId);
+  if (!tab) return null;
+
+  const updated: TrackedTab = {
+    ...tab,
+    tetherMode: "series",
+    seriesPattern: input.seriesPattern,
+    lastUpdatedAt: nowIso(),
+  };
+
+  await setLocalState({
+    cachedTabs: state.cachedTabs.map((t) => (t.id === input.tabId ? updated : t)),
+  });
+
+  return updated;
+}
+
+export async function updateOfflineTabTether(input: {
+  tabId: string;
+  tetherMode: TetherMode;
+  seriesPattern?: SeriesTetherPattern;
+}): Promise<TrackedTab | null> {
+  const state = await getLocalState();
+  const tab = state.cachedTabs.find((t) => t.id === input.tabId);
+  if (!tab) return null;
+
+  const updated: TrackedTab = {
+    ...tab,
+    tetherMode: input.tetherMode,
+    seriesPattern: input.seriesPattern,
+    lastUpdatedAt: nowIso(),
+  };
+
+  await setLocalState({
+    cachedTabs: state.cachedTabs.map((t) => (t.id === input.tabId ? updated : t)),
   });
 
   return updated;

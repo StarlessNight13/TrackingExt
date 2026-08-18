@@ -1,4 +1,6 @@
 import { hasSameHostname } from "./url-pattern";
+import { createInitialSeriesPattern, defaultTetherMode, evaluateSeriesTether, applyManualSeriesPatterns } from "./tether-series";
+import type { SeriesTetherPattern, TetherMode } from "./tether-series";
 import { ensureLocalDeviceId, getEffectiveDeviceId } from "./local-device";
 import { displayHostPath, isExcludedHost, isTrackableUrl, sanitizeUrl } from "./privacy";
 import { releaseOfflineTab } from "./sync/offline-store";
@@ -8,6 +10,8 @@ import {
   syncRenameTab,
   syncTakeOver,
   syncUpdateTabLocation,
+  syncUpdateTabSeriesPattern,
+  syncUpdateTabTether,
 } from "./sync/router";
 import { getLocalState, setLocalState } from "./storage";
 import { stripTrackedTabBadge } from "./title-badge";
@@ -88,7 +92,17 @@ export async function clearBindingsForTrackedTab(trackedTabId: string) {
   await setLocalState({ bindings: next });
 }
 
-export async function trackCurrentTab(tabId: number, name?: string, emoji?: string) {
+export async function trackCurrentTab(
+  tabId: number,
+  name?: string,
+  emoji?: string,
+  tetherMode: TetherMode = defaultTetherMode(),
+  existingTrackedTabId?: string,
+) {
+  if (existingTrackedTabId) {
+    return bindTabToActivity(tabId, existingTrackedTabId);
+  }
+
   const tab = await browser.tabs.get(tabId);
   if (!isTrackableUrl(tab.url)) {
     throw new Error("This page cannot be tethered");
@@ -111,11 +125,59 @@ export async function trackCurrentTab(tabId: number, name?: string, emoji?: stri
     emoji,
     url,
     title: tab.title ?? null,
+    tetherMode,
+    seriesPattern:
+      tetherMode === "series" ? createInitialSeriesPattern(url, tab.title ?? null) : undefined,
   });
 
   await setBinding(tabId, created.id);
   await applyTrackedTitleBadge(tabId, created.emoji);
   return created;
+}
+
+export async function bindTabToActivity(tabId: number, trackedTabId: string) {
+  const tab = await browser.tabs.get(tabId);
+  if (!isTrackableUrl(tab.url)) {
+    throw new Error("This page cannot be tethered");
+  }
+
+  if (!(await canUseTrackingFeatures())) {
+    throw new Error("Enable local tab tethering in settings");
+  }
+
+  const state = await getLocalState();
+  const tracked = state.cachedTabs.find((entry) => entry.id === trackedTabId);
+  if (!tracked) throw new Error("Tethered activity not found");
+
+  const existingBinding = state.bindings[bindingKey(tabId)];
+  if (existingBinding === trackedTabId) return tracked;
+
+  await setBinding(tabId, trackedTabId);
+  await applyTrackedTitleBadge(tabId, tracked.emoji);
+  return tracked;
+}
+
+export async function unbindTab(tabId: number) {
+  const state = await getLocalState();
+  const trackedTabId = state.bindings[bindingKey(tabId)];
+  if (!trackedTabId) return null;
+
+  await clearTrackedTitleBadge(tabId);
+  await clearBinding(tabId);
+
+  const stillBound = Object.values((await getLocalState()).bindings).includes(trackedTabId);
+  if (!stillBound) {
+    const deviceId = await getEffectiveDeviceId();
+    try {
+      if (trackedTabId.startsWith("local_")) {
+        await releaseOfflineTab(trackedTabId, deviceId);
+      }
+    } catch (error) {
+      console.warn("Failed to release tracked tab", error);
+    }
+  }
+
+  return state.cachedTabs.find((entry) => entry.id === trackedTabId) ?? null;
 }
 
 export async function stopTracking(trackedTabId: string) {
@@ -148,6 +210,49 @@ export async function takeOver(trackedTabId: string, browserTabId?: number) {
   return updated;
 }
 
+export async function updateSeriesTether(input: {
+  trackedTabId: string;
+  tetherMode?: TetherMode;
+  urlPattern?: string;
+  titlePattern?: string;
+  resetLearning?: boolean;
+}) {
+  const state = await getLocalState();
+  const tab = state.cachedTabs.find((t) => t.id === input.trackedTabId);
+  if (!tab) throw new Error("Tethered tab not found");
+
+  let tetherMode = input.tetherMode ?? tab.tetherMode ?? defaultTetherMode();
+  let seriesPattern = tab.seriesPattern;
+
+  if (input.tetherMode === "loose") {
+    seriesPattern = undefined;
+  } else if (input.resetLearning) {
+    tetherMode = "series";
+    seriesPattern = createInitialSeriesPattern(tab.currentUrl, tab.currentTitle);
+  } else if (input.urlPattern !== undefined || input.titlePattern !== undefined) {
+    if (!seriesPattern) {
+      seriesPattern = createInitialSeriesPattern(tab.currentUrl, tab.currentTitle);
+    }
+    seriesPattern = applyManualSeriesPatterns({
+      pattern: seriesPattern,
+      urlPattern: input.urlPattern,
+      titlePattern: input.titlePattern,
+    });
+    tetherMode = "series";
+  } else if (input.tetherMode === "series" && !seriesPattern) {
+    tetherMode = "series";
+    seriesPattern = createInitialSeriesPattern(tab.currentUrl, tab.currentTitle);
+  }
+
+  const updated = await syncUpdateTabTether({
+    tabId: input.trackedTabId,
+    tetherMode,
+    seriesPattern,
+  });
+  if (!updated) throw new Error("Tethered tab not found");
+  return updated;
+}
+
 export async function openTrackedTab(tracked: TrackedTab, takeOverOwnership = false) {
   const created = await browser.tabs.create({ url: tracked.currentUrl, active: true });
   if (created.id === undefined) return tracked;
@@ -173,22 +278,41 @@ export async function handleTabUpdate(tabId: number, url?: string, title?: strin
 
   const sanitized = sanitizeUrl(url, state.settings);
   if (isExcludedHost(sanitized, state.settings.excludedHosts)) return;
-  // A tracked activity is intentionally confined to the site where it started.
-  // This ignores ad hops and off-site redirects without stopping the binding.
-  if (tracked && !hasSameHostname(tracked.currentUrl, sanitized)) return;
+
   const cleanTitle = stripTrackedTabBadge(title ?? null, tracked?.emoji) ?? null;
   const deviceId = await getEffectiveDeviceId();
+  const tetherMode = tracked?.tetherMode ?? defaultTetherMode();
+  let seriesPattern: SeriesTetherPattern | undefined = tracked?.seriesPattern;
+
+  if (tetherMode === "loose") {
+    // A tracked activity is intentionally confined to the site where it started.
+    // This ignores ad hops and off-site redirects without stopping the binding.
+    if (tracked && !hasSameHostname(tracked.currentUrl, sanitized)) return;
+  } else if (tracked) {
+    const decision = evaluateSeriesTether({
+      pattern: tracked.seriesPattern ?? createInitialSeriesPattern(tracked.currentUrl, tracked.currentTitle),
+      url: sanitized,
+      title: cleanTitle,
+      previousUrl: tracked.currentUrl,
+    });
+    if (!decision.shouldSync) return;
+    seriesPattern = decision.pattern;
+  }
 
   if (
     tracked &&
     tracked.currentUrl === sanitized &&
     (tracked.currentTitle ?? null) === cleanTitle &&
-    tracked.activeDeviceId === deviceId
+    tracked.activeDeviceId === deviceId &&
+    seriesPattern === tracked.seriesPattern
   ) {
     return;
   }
 
   try {
+    if (seriesPattern && seriesPattern !== tracked?.seriesPattern) {
+      await syncUpdateTabSeriesPattern({ tabId: trackedTabId, seriesPattern });
+    }
     await syncUpdateTabLocation({
       tabId: trackedTabId,
       url: sanitized,
@@ -241,44 +365,39 @@ export async function reconcileRestoredTabs() {
 
   const newBindings: Record<string, string> = {};
   const pending: ReconnectCandidate[] = [];
-  const claimedTracked = new Set<string>();
-  const claimedBrowser = new Set<number>();
-
+  const trackedByUrl = new Map<string, TrackedTab[]>();
   for (const tracked of owned) {
-    const matches = trackable.filter((t) => {
-      if (t.id === undefined || claimedBrowser.has(t.id)) return false;
-      try {
-        return sanitizeUrl(t.url!, state.settings) === tracked.currentUrl;
-      } catch {
-        return false;
-      }
-    });
-
-    if (matches.length === 1 && matches[0]?.id !== undefined) {
-      newBindings[bindingKey(matches[0].id)] = tracked.id;
-      claimedTracked.add(tracked.id);
-      claimedBrowser.add(matches[0].id);
+    const matches = trackedByUrl.get(tracked.currentUrl);
+    if (matches) {
+      matches.push(tracked);
+    } else {
+      trackedByUrl.set(tracked.currentUrl, [tracked]);
     }
   }
 
-  for (const tracked of owned) {
-    if (claimedTracked.has(tracked.id)) continue;
-    const matches = trackable.filter((t) => {
-      if (t.id === undefined || claimedBrowser.has(t.id)) return false;
-      try {
-        return sanitizeUrl(t.url!, state.settings) === tracked.currentUrl;
-      } catch {
-        return false;
-      }
-    });
-    for (const match of matches) {
-      if (match.id === undefined) continue;
+  for (const tab of trackable) {
+    if (tab.id === undefined) continue;
+
+    let sanitized: string;
+    try {
+      sanitized = sanitizeUrl(tab.url!, state.settings);
+    } catch {
+      continue;
+    }
+
+    const matches = trackedByUrl.get(sanitized) ?? [];
+    if (matches.length === 1) {
+      newBindings[bindingKey(tab.id)] = matches[0]!.id;
+      continue;
+    }
+
+    for (const tracked of matches) {
       pending.push({
         trackedTabId: tracked.id,
         trackedTabName: tracked.name,
         url: tracked.currentUrl,
         title: tracked.currentTitle,
-        browserTabId: match.id,
+        browserTabId: tab.id,
       });
     }
   }

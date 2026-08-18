@@ -1,4 +1,4 @@
-import { completeOnboarding, findTabId, tetherTab } from "./helpers";
+import { findTabId, tetherTab, waitForPopupReady } from "./helpers";
 import { expect, test } from "./fixtures";
 
 test.describe("TabTether Chromium smoke", () => {
@@ -7,7 +7,7 @@ test.describe("TabTether Chromium smoke", () => {
     expect(serviceWorker.url()).toContain(`chrome-extension://${extensionId}/`);
   });
 
-  test("onboards, tethers example.com, and opens the dashboard", async ({
+  test("tethers example.com and opens the dashboard", async ({
     context,
     openPopup,
     openDashboard,
@@ -19,7 +19,7 @@ test.describe("TabTether Chromium smoke", () => {
 
     const popup = await openPopup();
     await expect(popup).toHaveTitle(/TabTether/);
-    await completeOnboarding(popup);
+    await waitForPopupReady(popup);
 
     const tabId = await findTabId(serviceWorker, "https://example.com");
     await tetherTab(popup, tabId, "Example activity");
