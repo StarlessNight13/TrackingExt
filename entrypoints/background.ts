@@ -32,10 +32,14 @@ import {
   takeOver,
   unbindTab,
   updateSeriesTether,
+  considerRestoredTab,
+  applyBadgeForBrowserTab,
 } from "../lib/tracking";
 import { runCloudDatabaseSpike } from "../lib/cloud-db/spike";
 import { syncCloudDatabase } from "../sync/cloud-sync";
 import { cloudTabView } from "../sync/cloud-tabs";
+import { withLocalTether } from "../lib/tether-overlay";
+import { findSyncedTab } from "../lib/sync/router";
 import {
   configureCloudDatabase,
   disconnectCloudDatabase,
@@ -96,9 +100,13 @@ async function buildSnapshot(): Promise<PopupSnapshot> {
       getSyncStoreSummary(),
       listCachedTabs(),
     ]);
+  const localById = new Map(state.cachedTabs.map((tab) => [tab.id, tab]));
   const displayedTabs = cloud.configuration
-    ? cloudTabs.filter((tab) => !tab.deletedAt).map(cloudTabView)
+    ? cloudTabs
+        .filter((tab) => !tab.deletedAt)
+        .map((tab) => withLocalTether(cloudTabView(tab), localById.get(tab.id)))
     : state.cachedTabs;
+  const displayedById = new Map(displayedTabs.map((tab) => [tab.id, tab]));
   const [active] = activeTabs;
   let currentTab: PopupSnapshot["currentTab"] = null;
 
@@ -111,7 +119,7 @@ async function buildSnapshot(): Promise<PopupSnapshot> {
   for (const tab of windowTabs) {
     if (tab.id === undefined || !isTrackableUrl(tab.url)) continue;
     const trackedId = state.bindings[String(tab.id)];
-    const tracked = trackedId ? (displayedTabs.find((entry) => entry.id === trackedId) ?? null) : null;
+    const tracked = trackedId ? (displayedById.get(trackedId) ?? null) : null;
     const visibleTitle = stripTrackedTabBadge(tab.title ?? "", tracked?.emoji) ?? tab.title ?? "";
     openTabs.push({
       tabId: tab.id,
@@ -124,7 +132,7 @@ async function buildSnapshot(): Promise<PopupSnapshot> {
 
   if (active?.id !== undefined && isTrackableUrl(active.url)) {
     const trackedId = state.bindings[String(active.id)];
-    const tracked = trackedId ? (displayedTabs.find((t) => t.id === trackedId) ?? null) : null;
+    const tracked = trackedId ? (displayedById.get(trackedId) ?? null) : null;
     const visibleTitle = stripTrackedTabBadge(active.title ?? "", tracked?.emoji) ?? "";
     currentTab = {
       id: active.id,
@@ -225,16 +233,7 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
       }
 
       case "OPEN_TAB": {
-        const state = await getLocalState();
-        const cloud = await getCloudCredentials();
-        const cloudTab = cloud
-          ? (await listCachedTabs()).find((tab) => tab.id === message.trackedTabId)
-          : null;
-        const tracked = cloud
-          ? cloudTab && !cloudTab.deletedAt
-            ? cloudTabView(cloudTab)
-            : null
-          : state.cachedTabs.find((tab) => tab.id === message.trackedTabId);
+        const tracked = await findSyncedTab(message.trackedTabId);
         if (!tracked) throw new Error("Tethered tab not found");
         await openTrackedTab(tracked, message.takeOver ?? false);
         return { ok: true, snapshot: await buildSnapshot() };
@@ -558,11 +557,22 @@ async function openResumePicker() {
 }
 
 export default defineBackground(() => {
-  browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (isOffscreenLanMessage(message)) return false;
 
     if (isStorageBridgeMessage(message)) {
       void handleStorageBridgeMessage(message).then(sendResponse);
+      return true;
+    }
+
+    if (
+      typeof message === "object" &&
+      message !== null &&
+      "type" in message &&
+      message.type === "CONTENT_SCRIPT_READY" &&
+      sender.tab?.id !== undefined
+    ) {
+      void applyBadgeForBrowserTab(sender.tab.id).then(() => sendResponse({ ok: true }));
       return true;
     }
 
@@ -590,10 +600,16 @@ export default defineBackground(() => {
   }
 
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (!changeInfo.url && !changeInfo.title && changeInfo.status !== "complete") return;
+    if (!changeInfo.url && !changeInfo.title && changeInfo.status !== "complete" && !changeInfo.discarded) {
+      return;
+    }
     const url = changeInfo.url ?? tab.url;
     const title = changeInfo.title ?? tab.title;
     void handleTabUpdate(tabId, url, title);
+  });
+
+  browser.tabs.onCreated.addListener((tab) => {
+    void considerRestoredTab(tab);
   });
 
   browser.tabs.onRemoved.addListener((tabId) => {

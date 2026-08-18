@@ -9,9 +9,10 @@ export default defineConfig({
     },
   },
   zip: {
-    // Self-hosted dashboard downloads; AMO source zip not required
-    zipSources: false,
+    // AMO needs the built zip plus a source archive for minified WXT output.
+    zipSources: true,
     artifactTemplate: "{{name}}-{{browser}}.zip",
+    sourcesTemplate: "{{name}}-{{browser}}-sources.zip",
   },
   suppressWarnings: {
     firefoxDataCollection: true,

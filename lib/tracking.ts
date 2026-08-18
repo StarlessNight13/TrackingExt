@@ -12,10 +12,13 @@ import {
   syncUpdateTabLocation,
   syncUpdateTabSeriesPattern,
   syncUpdateTabTether,
+  findSyncedTab,
+  listKnownTrackedTabs,
 } from "./sync/router";
 import { getLocalState, setLocalState } from "./storage";
 import { stripTrackedTabBadge } from "./title-badge";
 import type { ReconnectCandidate, TrackedTab } from "./types";
+import { matchRestoredBindings, tabRestoreUrl } from "./restore-bindings";
 
 type TitleBadgeMessage =
   | { type: "SET_TRACKED_TITLE_BADGE"; emoji?: string | null }
@@ -55,8 +58,7 @@ export async function canUseTrackingFeatures() {
 }
 
 export async function refreshCachedTabs() {
-  const state = await getLocalState();
-  return state.cachedTabs;
+  return listKnownTrackedTabs();
 }
 
 export async function syncSettings() {
@@ -146,7 +148,7 @@ export async function bindTabToActivity(tabId: number, trackedTabId: string) {
   }
 
   const state = await getLocalState();
-  const tracked = state.cachedTabs.find((entry) => entry.id === trackedTabId);
+  const tracked = await findSyncedTab(trackedTabId);
   if (!tracked) throw new Error("Tethered activity not found");
 
   const existingBinding = state.bindings[bindingKey(tabId)];
@@ -217,8 +219,7 @@ export async function updateSeriesTether(input: {
   titlePattern?: string;
   resetLearning?: boolean;
 }) {
-  const state = await getLocalState();
-  const tab = state.cachedTabs.find((t) => t.id === input.trackedTabId);
+  const tab = await findSyncedTab(input.trackedTabId);
   if (!tab) throw new Error("Tethered tab not found");
 
   let tetherMode = input.tetherMode ?? tab.tetherMode ?? defaultTetherMode();
@@ -266,10 +267,19 @@ export async function openTrackedTab(tracked: TrackedTab, takeOverOwnership = fa
 }
 
 export async function handleTabUpdate(tabId: number, url?: string, title?: string) {
+  if (await isRestoreWindowActive()) {
+    try {
+      await considerRestoredTab(await browser.tabs.get(tabId));
+    } catch {
+      await considerRestoredTab({ id: tabId, url, title });
+    }
+  }
+
   const state = await getLocalState();
   const trackedTabId = state.bindings[bindingKey(tabId)];
   if (!trackedTabId) return;
-  const tracked = state.cachedTabs.find((tab) => tab.id === trackedTabId);
+  let tracked = state.cachedTabs.find((tab) => tab.id === trackedTabId);
+  if (!tracked) tracked = (await findSyncedTab(trackedTabId)) ?? undefined;
 
   await applyTrackedTitleBadge(tabId, tracked?.emoji);
 
@@ -333,7 +343,7 @@ export async function handleTabRemoved(tabId: number) {
 
   const deviceId = await getEffectiveDeviceId();
   const stillBound = Object.values((await getLocalState()).bindings).includes(trackedTabId);
-  if (!stillBound) {
+  if (!stillBound && !(await isRestoreWindowActive())) {
     try {
       if (trackedTabId.startsWith("local_")) {
         await releaseOfflineTab(trackedTabId, deviceId);
@@ -344,74 +354,159 @@ export async function handleTabRemoved(tabId: number) {
   }
 }
 
-export async function reconcileRestoredTabs() {
-  const state = await getLocalState();
-  const deviceId = state.deviceId ?? state.localDeviceId;
-  if (!deviceId) {
-    await setLocalState({ pendingReconnect: [], bindings: {} });
-    return;
-  }
+const RESTORE_WINDOW_MS = 120_000;
+const RESTORE_WINDOW_KEY = "restoreWindowUntil";
+let memoryRestoreUntil = 0;
+let restoreLock: Promise<void> | undefined;
 
-  let remoteTabs: TrackedTab[];
+export async function beginRestoreWindow() {
+  memoryRestoreUntil = Date.now() + RESTORE_WINDOW_MS;
   try {
-    remoteTabs = await refreshCachedTabs();
+    await browser.storage.session.set({ [RESTORE_WINDOW_KEY]: memoryRestoreUntil });
   } catch {
-    remoteTabs = state.cachedTabs;
+    // session storage is missing in some browsers/tests
   }
+}
 
-  const owned = remoteTabs.filter((t) => t.lastUpdatedDeviceId === deviceId);
-  const browserTabs = await browser.tabs.query({});
-  const trackable = browserTabs.filter((t) => t.id !== undefined && isTrackableUrl(t.url));
-
-  const newBindings: Record<string, string> = {};
-  const pending: ReconnectCandidate[] = [];
-  const trackedByUrl = new Map<string, TrackedTab[]>();
-  for (const tracked of owned) {
-    const matches = trackedByUrl.get(tracked.currentUrl);
-    if (matches) {
-      matches.push(tracked);
-    } else {
-      trackedByUrl.set(tracked.currentUrl, [tracked]);
-    }
+export async function isRestoreWindowActive() {
+  if (Date.now() < memoryRestoreUntil) return true;
+  try {
+    const stored = await browser.storage.session.get(RESTORE_WINDOW_KEY);
+    const until = stored[RESTORE_WINDOW_KEY];
+    return typeof until === "number" && Date.now() < until;
+  } catch {
+    return false;
   }
+}
 
-  for (const tab of trackable) {
-    if (tab.id === undefined) continue;
+async function withRestoreLock(fn: () => Promise<void>) {
+  while (restoreLock) await restoreLock;
+  restoreLock = fn()
+    .catch((error) => {
+      console.warn("Failed to restore tethered tabs", error);
+    })
+    .finally(() => {
+      restoreLock = undefined;
+    });
+  await restoreLock;
+}
 
-    let sanitized: string;
-    try {
-      sanitized = sanitizeUrl(tab.url!, state.settings);
-    } catch {
-      continue;
-    }
+function restoreDeviceIds(
+  state: { deviceId: string | null; localDeviceId: string | null },
+  effectiveId: string,
+) {
+  return [effectiveId, state.deviceId, state.localDeviceId].filter((id): id is string => Boolean(id));
+}
 
-    const matches = trackedByUrl.get(sanitized) ?? [];
-    if (matches.length === 1) {
-      newBindings[bindingKey(tab.id)] = matches[0]!.id;
-      continue;
-    }
+function mergePendingReconnect(existing: ReconnectCandidate[], incoming: ReconnectCandidate[]) {
+  const seen = new Set(existing.map((item) => `${item.trackedTabId}:${item.browserTabId}`));
+  const merged = [...existing];
+  for (const item of incoming) {
+    const key = `${item.trackedTabId}:${item.browserTabId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
 
-    for (const tracked of matches) {
-      pending.push({
-        trackedTabId: tracked.id,
-        trackedTabName: tracked.name,
-        url: tracked.currentUrl,
-        title: tracked.currentTitle,
-        browserTabId: tab.id,
+function browserTabRestoreFields(tab: { id?: number; url?: string; pendingUrl?: string }) {
+  return {
+    id: tab.id,
+    url: tab.url,
+    pendingUrl:
+      "pendingUrl" in tab && typeof tab.pendingUrl === "string" ? tab.pendingUrl : undefined,
+  };
+}
+
+export async function applyBadgeForBrowserTab(tabId: number) {
+  const trackedTabId = await getBindingForTab(tabId);
+  if (!trackedTabId) return;
+  const tracked = await findSyncedTab(trackedTabId);
+  await applyTrackedTitleBadge(tabId, tracked?.emoji);
+}
+
+export async function considerRestoredTab(tab: {
+  id?: number;
+  url?: string;
+  pendingUrl?: string;
+  title?: string;
+}) {
+  if (!(await isRestoreWindowActive())) return;
+  if (tab.id === undefined || !tabRestoreUrl(tab)) return;
+
+  await withRestoreLock(async () => {
+    const state = await getLocalState();
+    if (state.bindings[bindingKey(tab.id!)]) return;
+
+    const activities = await listKnownTrackedTabs();
+    const effectiveId = await getEffectiveDeviceId();
+    const { bindings, pending } = matchRestoredBindings(
+      [browserTabRestoreFields(tab)],
+      activities,
+      state.settings,
+      restoreDeviceIds(state, effectiveId),
+    );
+    const trackedTabId = bindings[bindingKey(tab.id!)];
+    if (!trackedTabId) {
+      if (pending.length === 0) return;
+      await setLocalState({
+        pendingReconnect: mergePendingReconnect(state.pendingReconnect, pending),
       });
+      return;
     }
-  }
 
-  await setLocalState({
-    bindings: newBindings,
-    pendingReconnect: pending,
+    await setBinding(tab.id!, trackedTabId);
+    const tracked = activities.find((activity) => activity.id === trackedTabId);
+    await applyTrackedTitleBadge(tab.id!, tracked?.emoji);
   });
-  await Promise.all(
-    Object.entries(newBindings).map(([tabId, trackedId]) => {
-      const tracked = remoteTabs.find((tab) => tab.id === trackedId);
-      return applyTrackedTitleBadge(Number(tabId), tracked?.emoji);
-    }),
-  );
+}
+
+export async function reconcileRestoredTabs() {
+  await beginRestoreWindow();
+  await withRestoreLock(async () => {
+    const state = await getLocalState();
+    const effectiveId = await getEffectiveDeviceId();
+    let remoteTabs: TrackedTab[];
+    try {
+      remoteTabs = await listKnownTrackedTabs();
+    } catch {
+      remoteTabs = state.cachedTabs;
+    }
+
+    const browserTabs = await browser.tabs.query({});
+    const { bindings, pending } = matchRestoredBindings(
+      browserTabs.map(browserTabRestoreFields),
+      remoteTabs,
+      state.settings,
+      restoreDeviceIds(state, effectiveId),
+    );
+
+    const liveTabIds = new Set(
+      browserTabs.flatMap((tab) => (tab.id === undefined ? [] : [String(tab.id)])),
+    );
+    const keptBindings: Record<string, string> = {};
+    for (const [tabId, trackedId] of Object.entries(state.bindings)) {
+      if (liveTabIds.has(tabId) && !bindings[tabId]) keptBindings[tabId] = trackedId;
+    }
+
+    const sawTrackable = browserTabs.some((tab) => Boolean(tabRestoreUrl(tab) && isTrackableUrl(tabRestoreUrl(tab))));
+    if (!sawTrackable && Object.keys(bindings).length === 0) {
+      return;
+    }
+
+    const nextBindings = { ...keptBindings, ...bindings };
+    await setLocalState({
+      bindings: nextBindings,
+      pendingReconnect: pending,
+    });
+    await Promise.all(
+      Object.entries(nextBindings).map(([tabId, trackedId]) => {
+        const tracked = remoteTabs.find((tab) => tab.id === trackedId);
+        return applyTrackedTitleBadge(Number(tabId), tracked?.emoji);
+      }),
+    );
+  });
 }
 
 export async function confirmReconnect(candidate: ReconnectCandidate, takeOverOwnership = true) {

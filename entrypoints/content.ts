@@ -74,6 +74,10 @@ export default defineContentScript({
       }
     });
 
+    void browser.runtime.sendMessage({ type: "CONTENT_SCRIPT_READY" }).catch(() => {
+      // Background may still be starting during session restore.
+    });
+
     syncTrackedTitle();
   },
 });

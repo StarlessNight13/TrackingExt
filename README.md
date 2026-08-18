@@ -73,7 +73,8 @@ bun run build:firefox
 **Output**
 
 - Built files: `.output/firefox-mv2/`
-- Optional zip: `bun run zip:firefox` → `.output/tabtether-firefox.zip`
+- Add-on zip: `bun run zip:firefox` → `.output/tabtether-firefox.zip`
+- Source zip for AMO review: `.output/tabtether-firefox-sources.zip`
 
 The Firefox extension ID in `wxt.config.ts` is `trackingext@trackingext.local`.
 
