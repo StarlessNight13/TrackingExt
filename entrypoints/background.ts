@@ -89,6 +89,14 @@ async function scheduleConfiguredCloudSync() {
   await scheduleCloudSyncAlarm(browser.alarms, credentials?.behavior);
 }
 
+async function requestCloudSyncBestEffort(reason: string) {
+  try {
+    await requestCloudSync("activity");
+  } catch (error) {
+    console.warn(`[TabTether] ${reason} saved but follow-up sync failed`, error);
+  }
+}
+
 async function disableUnsupportedLanSync() {
   if (supportsLanSync) return;
 
@@ -101,7 +109,7 @@ async function disableUnsupportedLanSync() {
 
 async function buildSnapshot(): Promise<PopupSnapshot> {
   const state = await getLocalState();
-  const [effectiveDeviceId, lanStatus, activeTabs, windowTabs, cloud, cloudStore, cloudTabs] =
+  const [effectiveDeviceId, lanStatus, activeTabs, windowTabs, cloud, cloudStore] =
     await Promise.all([
       getEffectiveDeviceId(),
       getLanStatusFromOffscreen(state.pairedLanDevices.map((device) => device.deviceId)),
@@ -109,11 +117,10 @@ async function buildSnapshot(): Promise<PopupSnapshot> {
       browser.tabs.query({ currentWindow: true }),
       getCloudSummary(),
       getSyncStoreSummary(),
-      listCachedTabs(),
     ]);
   const localById = new Map(state.cachedTabs.map((tab) => [tab.id, tab]));
   const displayedTabs = cloud.configuration
-    ? cloudTabs
+    ? (await listCachedTabs())
         .filter((tab) => !tab.deletedAt)
         .map((tab) => withLocalTether(cloudTabView(tab), localById.get(tab.id)))
     : state.cachedTabs;
@@ -189,7 +196,7 @@ async function updateSettingsPartial(settings: Partial<PrivacySettings>) {
     if (settings.historyRetentionDays !== undefined) {
       await purgeCloudHistoryByRetention(merged.historyRetentionDays);
     }
-    await requestCloudSync("activity");
+    await requestCloudSyncBestEffort("Cloud settings");
     return merged;
   }
 
@@ -453,10 +460,11 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
           deviceId,
           deviceName: message.deviceName.trim() || state.deviceName || defaultDeviceName(),
           browser: detectBrowser(),
+          behavior: message.behavior,
         });
         await scheduleCloudSyncAlarm(browser.alarms, configuration.behavior);
         await updateCloudSettings(state.settings);
-        await requestCloudSync("activity");
+        await requestCloudSyncBestEffort("Cloud database connection");
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
@@ -506,12 +514,12 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 
       case "SAVE_CLOUD_GROUP":
         await saveCloudGroup(message);
-        await requestCloudSync("activity");
+        await requestCloudSyncBestEffort("Cloud group");
         return { ok: true, groups: await listCloudGroups(), snapshot: await buildSnapshot() };
 
       case "DELETE_CLOUD_GROUP":
         await deleteCloudGroup(message.id, message.revision);
-        await requestCloudSync("activity");
+        await requestCloudSyncBestEffort("Cloud group");
         return { ok: true, groups: await listCloudGroups(), snapshot: await buildSnapshot() };
 
       case "LIST_CLOUD_DEVICES":
@@ -519,12 +527,12 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 
       case "RENAME_CLOUD_DEVICE":
         await renameCloudDevice(message.id, message.name, message.revision);
-        await requestCloudSync("activity");
+        await requestCloudSyncBestEffort("Cloud device");
         return { ok: true, devices: await listCloudDevices(), snapshot: await buildSnapshot() };
 
       case "REMOVE_CLOUD_DEVICE":
         await removeCloudDevice(message.id, message.revision);
-        await requestCloudSync("activity");
+        await requestCloudSyncBestEffort("Cloud device");
         return { ok: true, devices: await listCloudDevices(), snapshot: await buildSnapshot() };
 
       default: {

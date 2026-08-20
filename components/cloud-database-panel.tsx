@@ -55,8 +55,19 @@ export function CloudDatabasePanel({
   }, [snapshot.cloud.status.lastSyncAt, snapshot.cloud.pending]);
 
   useEffect(() => {
-    setBehavior(snapshot.cloud.configuration?.behavior ?? DEFAULT_CLOUD_SYNC_POLICY);
-  }, [snapshot.cloud.configuration?.behavior]);
+    const next = snapshot.cloud.configuration?.behavior ?? DEFAULT_CLOUD_SYNC_POLICY;
+    setBehavior((current) =>
+      current.activitySync === next.activitySync &&
+      current.scheduledSync === next.scheduledSync &&
+      current.scheduledSyncIntervalMinutes === next.scheduledSyncIntervalMinutes
+        ? current
+        : next,
+    );
+  }, [
+    snapshot.cloud.configuration?.behavior?.activitySync,
+    snapshot.cloud.configuration?.behavior?.scheduledSync,
+    snapshot.cloud.configuration?.behavior?.scheduledSyncIntervalMinutes,
+  ]);
 
   const run = (action: () => Promise<void>) => {
     setError(null);
@@ -86,6 +97,7 @@ export function CloudDatabasePanel({
               provider,
               tokenPersistence: persistent ? "persistent" : "session",
               deviceName: snapshot.deviceName ?? "Browser",
+              behavior,
             });
             if (!response.ok) throw new Error(response.error);
             setToken("");

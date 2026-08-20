@@ -102,6 +102,7 @@ export type ExtensionRequest =
       provider: DatabaseProvider;
       tokenPersistence: "persistent" | "session";
       deviceName: string;
+      behavior?: CloudSyncPolicy;
     }
   | { type: "DISCONNECT_CLOUD_DATABASE" }
   | { type: "ARCHIVE_TAB"; trackedTabId: string }
