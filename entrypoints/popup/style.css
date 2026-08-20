@@ -141,6 +141,11 @@ html.extension-fullpage .cloud-management-card {
   width: 100%;
 }
 
+html.extension-fullpage .cloud-management-list--devices {
+  max-height: none;
+  overflow-y: visible;
+}
+
 html,
 body,
 #root {

@@ -180,7 +180,7 @@ export function CloudManagementPanel({
       {items.length === 0 ? (
         <div className="empty">No {kind} yet.</div>
       ) : (
-        <div className="list compact-list">
+        <div className={`list compact-list${kind === "devices" ? " cloud-management-list--devices" : ""}`}>
           {items.map((item) => (
             <div className={`panel cloud-management-card${"notes" in item ? " cloud-group-card" : ""}`} key={item.id}>
               <div className="row cloud-management-card__header" style={{ justifyContent: "space-between" }}>
