@@ -1,13 +1,23 @@
 import { defineConfig } from "wxt";
+import { platform } from "node:process";
+
+const chromiumBinary =
+  platform === "win32"
+    ? "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+    : platform === "linux"
+      ? "/usr/bin/helium"
+      : undefined;
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
-  webExt: {
-    binaries: {
-      chrome: "/usr/bin/helium",
-    },
-  },
+  webExt: chromiumBinary
+    ? {
+        binaries: {
+          chrome: chromiumBinary,
+        },
+      }
+    : undefined,
   zip: {
     // AMO needs the built zip plus a source archive for minified WXT output.
     zipSources: true,
