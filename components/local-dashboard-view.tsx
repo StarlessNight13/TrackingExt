@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from "reac
 import { createPortal } from "react-dom";
 
 import type { LocalDashboardTab } from "@/lib/open-dashboard";
+import { ActivityMetadataEditor } from "@/components/activity-metadata-editor";
 import { displayHostPath } from "@/lib/privacy";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import { describeSyncModes } from "@/lib/sync-modes";
@@ -235,11 +236,10 @@ function LocalTabsPanel({
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [seriesPanelId, setSeriesPanelId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
 
   const startEdit = (tracked: TrackedTab) => {
     setEditingId(tracked.id);
-    setEditName(tracked.name);
+    setSeriesPanelId(null);
   };
 
   return (
@@ -274,11 +274,12 @@ function LocalTabsPanel({
           {snapshot.trackedTabs.map((tracked) => (
             <div key={tracked.id} className="panel compact-track local-dashboard__tab-card">
               {editingId === tracked.id ? (
-                <M3TextField
-                  id={`rename-${tracked.id}`}
-                  label="Name"
-                  value={editName}
-                  onChange={setEditName}
+                <ActivityMetadataEditor
+                  tracked={tracked}
+                  snapshot={snapshot}
+                  onUpdate={onUpdate}
+                  compact
+                  onSaved={() => setEditingId(null)}
                 />
               ) : (
                 <>
@@ -318,33 +319,13 @@ function LocalTabsPanel({
 
               <div className="row wrap local-dashboard__tab-actions">
                 {editingId === tracked.id ? (
-                  <>
-                    <button
-                      className="btn secondary"
-                      disabled={pending || !editName.trim()}
-                      onClick={() =>
-                        run(async () => {
-                          const res = await sendMessage({
-                            type: "RENAME_TAB",
-                            trackedTabId: tracked.id,
-                            name: editName.trim(),
-                          });
-                          if (!res.ok) throw new Error(res.error);
-                          setEditingId(null);
-                          if (res.snapshot) onUpdate(res.snapshot);
-                        })
-                      }
-                    >
-                      Save
-                    </button>
-                    <button
-                      className="btn ghost"
-                      disabled={pending}
-                      onClick={() => setEditingId(null)}
-                    >
-                      Cancel
-                    </button>
-                  </>
+                  <button
+                    className="btn ghost"
+                    disabled={pending}
+                    onClick={() => setEditingId(null)}
+                  >
+                    Cancel
+                  </button>
                 ) : (
                   <>
                     <button
@@ -386,7 +367,7 @@ function LocalTabsPanel({
                           Open without taking over
                         </button>
                         <button className="btn ghost" disabled={pending} onClick={() => startEdit(tracked)}>
-                          Rename
+                          Edit details
                         </button>
                         {snapshot.settings.recordHistory ? (
                           <button className="btn ghost" disabled={pending} onClick={() => onOpenHistory(tracked)}>

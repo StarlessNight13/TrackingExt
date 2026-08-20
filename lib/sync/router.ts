@@ -197,14 +197,17 @@ export async function syncRenameTab(
   tabId: string,
   name: string,
   emoji?: string | null,
+  tags?: string[],
+  groupId?: string | null,
 ): Promise<TrackedTab | null> {
   const state = await getLocalState();
   if (await getCloudCredentials()) {
-    const tab = await renameCloudTab(tabId, name, emoji);
+    const tab = await renameCloudTab(tabId, name, emoji, tags, groupId);
+    if (tab) await persistCachedTab({ ...tab, tags: tags ?? tab.tags, groupId: groupId ?? tab.groupId });
     if (tab && state.syncModes.lan) void broadcastLanTabEvent({ type: "tab_updated", tab });
     return tab;
   }
-  let tab = await renameOfflineTab(tabId, name, emoji);
+  let tab = await renameOfflineTab(tabId, name, emoji, tags, groupId);
 
   if (tab && state.syncModes.lan) {
     void broadcastLanTabEvent({ type: "tab_updated", tab });

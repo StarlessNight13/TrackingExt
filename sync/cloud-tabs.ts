@@ -95,6 +95,23 @@ async function mutateCloudTab(
   const tab = (await listCachedTabs()).find((candidate) => candidate.id === id);
   if (!tab) return null;
   const now = Date.now();
+  const renamePayload =
+    kind === "rename"
+      ? {
+          name: String(payload.name),
+          emoji: payload.emoji == null ? null : payload.emoji !== undefined ? String(payload.emoji) : tab.emoji,
+          tags:
+            payload.tags !== undefined
+              ? (payload.tags as string[])
+              : (JSON.parse(tab.tags) as string[]),
+          groupId:
+            payload.groupId !== undefined
+              ? payload.groupId == null
+                ? null
+                : String(payload.groupId)
+              : tab.groupId,
+        }
+      : null;
   const optimistic: TrackedTabRecord = {
     ...tab,
     ...(kind === "update_location"
@@ -105,12 +122,12 @@ async function mutateCloudTab(
           lastUpdatedDeviceId: cloud.deviceId,
         }
       : {}),
-    ...(kind === "rename"
+    ...(kind === "rename" && renamePayload
       ? {
-          name: String(payload.name),
-          ...(payload.emoji !== undefined
-            ? { emoji: payload.emoji == null ? null : String(payload.emoji) }
-            : {}),
+          name: renamePayload.name,
+          emoji: renamePayload.emoji,
+          tags: JSON.stringify(renamePayload.tags),
+          groupId: renamePayload.groupId,
         }
       : {}),
     ...(kind === "delete" ? { deletedAt: now, activeDeviceId: null } : {}),
@@ -119,7 +136,7 @@ async function mutateCloudTab(
       : {}),
     updatedAt: now,
   };
-  await enqueueOptimisticTab(optimistic, kind, payload);
+  await enqueueOptimisticTab(optimistic, kind, renamePayload ?? payload);
   void syncCloudDatabase();
   return cloudTabView(optimistic);
 }
@@ -130,7 +147,12 @@ export const updateCloudTabLocation = (
   title: string | null,
   recordHistory: boolean,
 ) => mutateCloudTab(id, "update_location", { url, title, recordHistory });
-export const renameCloudTab = (id: string, name: string, emoji?: string | null) =>
-  mutateCloudTab(id, "rename", { name, emoji });
+export const renameCloudTab = (
+  id: string,
+  name: string,
+  emoji?: string | null,
+  tags?: string[],
+  groupId?: string | null,
+) => mutateCloudTab(id, "rename", { name, emoji, tags, groupId });
 export const deleteCloudTab = (id: string) => mutateCloudTab(id, "delete", {});
 export const takeOverCloudTab = (id: string) => mutateCloudTab(id, "takeover", {});

@@ -120,12 +120,13 @@ async function applyConditionalMutation(
     }
   } else if (operation.kind === "rename") {
     mutation = {
-      sql: `UPDATE tracked_tab SET name = ?, emoji = ?, tags = ?, updated_at = ?, revision = revision + 1
+      sql: `UPDATE tracked_tab SET name = ?, emoji = ?, tags = ?, group_id = ?, updated_at = ?, revision = revision + 1
         WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at IS NULL`,
       args: [
         String(operation.payload.name),
         operation.payload.emoji == null ? null : String(operation.payload.emoji),
         JSON.stringify(operation.payload.tags ?? []),
+        operation.payload.groupId == null ? null : String(operation.payload.groupId),
         operation.createdAt,
         operation.entityId,
         workspaceId,

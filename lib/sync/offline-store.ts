@@ -176,6 +176,8 @@ export async function renameOfflineTab(
   tabId: string,
   name: string,
   emoji?: string | null,
+  tags?: string[],
+  groupId?: string | null,
 ): Promise<TrackedTab | null> {
   const state = await getLocalState();
   const tab = state.cachedTabs.find((t) => t.id === tabId);
@@ -185,6 +187,8 @@ export async function renameOfflineTab(
     ...tab,
     name,
     ...(emoji !== undefined ? { emoji } : {}),
+    ...(tags !== undefined ? { tags } : {}),
+    ...(groupId !== undefined ? { groupId, group: null } : {}),
     lastUpdatedAt: nowIso(),
   };
 

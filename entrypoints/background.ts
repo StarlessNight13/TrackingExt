@@ -227,6 +227,17 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
+      case "UPDATE_TAB": {
+        await renameTrackedTab(
+          message.trackedTabId,
+          message.name,
+          message.emoji,
+          message.tags,
+          message.groupId,
+        );
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
       case "UPDATE_SERIES_TETHER": {
         await updateSeriesTether(message);
         return { ok: true, snapshot: await buildSnapshot() };

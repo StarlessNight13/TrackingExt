@@ -3,6 +3,7 @@ import { useEffect, useState, useTransition } from "react";
 import { displayHostPath } from "@/lib/privacy";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import { HistoryView } from "@/components/history-view";
+import { ActivityMetadataEditor } from "@/components/activity-metadata-editor";
 import { ResumePicker } from "@/components/resume-picker";
 import { SeriesTetherPanel } from "@/components/series-tether-panel";
 import { openDashboard } from "@/lib/open-dashboard";
@@ -14,6 +15,7 @@ import { supportedSyncModes, supportsLanSync } from "@/lib/browser-capabilities"
 import { formatDevice, relativeTime } from "@/lib/view-utils";
 
 import { ExtensionThemeProvider } from "./components/extension-theme-provider";
+import { CollapsibleSection } from "./components/collapsible-section";
 import { IconSettings } from "./components/icons";
 import { LanPairingPanel } from "./components/lan-pairing-panel";
 import { M3SwitchRow } from "./components/m3-switch";
@@ -103,173 +105,182 @@ function SettingsView({
         </span>
       </div>
 
-      <div className="panel stack settings-panel">
-        <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-          Sync modes (at least one required)
-        </p>
-        <M3SwitchRow
-          title="Online"
-          description="Sync through a connected database"
-          checked={syncModes.online}
-          onChange={() => toggleSyncMode("online")}
-          id="settings-mode-online"
-        />
-        <M3SwitchRow
-          title="Offline"
-          description="This browser only"
-          checked={syncModes.offline}
-          onChange={() => toggleSyncMode("offline")}
-          id="settings-mode-offline"
-        />
-        {supportsLanSync ? (
+      <CollapsibleSection id="settings-sync-modes" title="Sync modes" defaultOpen>
+        <div className="panel stack settings-panel">
+          <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+            At least one mode required
+          </p>
           <M3SwitchRow
-            title="LAN"
-            description="Same-network WebRTC sync"
-            checked={syncModes.lan}
-            onChange={() => toggleSyncMode("lan")}
-            id="settings-mode-lan"
+            title="Online"
+            description="Sync through a connected database"
+            checked={syncModes.online}
+            onChange={() => toggleSyncMode("online")}
+            id="settings-mode-online"
           />
-        ) : null}
-        <button className="btn secondary" disabled={pending} onClick={saveSyncModes}>
-          Save sync modes
-        </button>
-        <button
-          className="btn ghost"
-          disabled={pending}
-          onClick={() => {
-            setError(null);
-            startTransition(async () => {
-              const res = await sendMessage({ type: "SYNC_NOW" });
-              if (!res.ok) {
-                setError(res.error);
-                return;
-              }
-              if (res.snapshot) onUpdate(res.snapshot);
-            });
-          }}
-        >
-          Sync all modes now
-        </button>
-      </div>
+          <M3SwitchRow
+            title="Offline"
+            description="This browser only"
+            checked={syncModes.offline}
+            onChange={() => toggleSyncMode("offline")}
+            id="settings-mode-offline"
+          />
+          {supportsLanSync ? (
+            <M3SwitchRow
+              title="LAN"
+              description="Same-network WebRTC sync"
+              checked={syncModes.lan}
+              onChange={() => toggleSyncMode("lan")}
+              id="settings-mode-lan"
+            />
+          ) : null}
+          <button className="btn secondary" disabled={pending} onClick={saveSyncModes}>
+            Save sync modes
+          </button>
+          <button
+            className="btn ghost"
+            disabled={pending}
+            onClick={() => {
+              setError(null);
+              startTransition(async () => {
+                const res = await sendMessage({ type: "SYNC_NOW" });
+                if (!res.ok) {
+                  setError(res.error);
+                  return;
+                }
+                if (res.snapshot) onUpdate(res.snapshot);
+              });
+            }}
+          >
+            Sync all modes now
+          </button>
+        </div>
+      </CollapsibleSection>
 
       {supportsLanSync && (snapshot.syncModes.lan || syncModes.lan) ? (
-        <div className="panel stack">
-          <span className="section-title" style={{ margin: 0 }}>
-            LAN devices
-          </span>
-          <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-            Pair via copied tokens. Reconnect after restart requires re-pairing.
-          </p>
-          {snapshot.pairedLanDevices.length === 0 ? (
+        <CollapsibleSection
+          id="settings-lan"
+          title="LAN devices"
+          defaultOpen={snapshot.pairedLanDevices.length > 0}
+          badge={`${snapshot.pairedLanDevices.length} paired`}
+        >
+          <div className="panel stack">
             <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-              No paired devices. Pair from another browser using a token below.
+              Pair via copied tokens. Reconnect after restart requires re-pairing.
             </p>
-          ) : (
-            <div className="list compact-list">
-              {snapshot.pairedLanDevices.map((device) => {
-                const online = snapshot.lanPeerStatus[device.deviceId] ?? false;
-                return (
-                  <div key={device.deviceId} className="panel compact-track">
-                    <div className="row" style={{ justifyContent: "space-between" }}>
-                      <span className="name">{device.deviceName}</span>
-                      <span className="pill">{online ? "Connected" : "Offline"}</span>
-                    </div>
-                    <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-                      {device.browser ?? "Browser"} · paired {relativeTime(device.pairedAt)}
-                    </p>
-                    <button
-                      className="btn danger"
-                      disabled={pending}
-                      onClick={() => {
-                        setError(null);
-                        startTransition(async () => {
-                          const res = await sendMessage({
-                            type: "REMOVE_LAN_PEER",
-                            deviceId: device.deviceId,
+            {snapshot.pairedLanDevices.length === 0 ? (
+              <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+                No paired devices. Pair from another browser using a token below.
+              </p>
+            ) : (
+              <div className="list compact-list">
+                {snapshot.pairedLanDevices.map((device) => {
+                  const online = snapshot.lanPeerStatus[device.deviceId] ?? false;
+                  return (
+                    <div key={device.deviceId} className="panel compact-track">
+                      <div className="row" style={{ justifyContent: "space-between" }}>
+                        <span className="name">{device.deviceName}</span>
+                        <span className="pill">{online ? "Connected" : "Offline"}</span>
+                      </div>
+                      <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+                        {device.browser ?? "Browser"} · paired {relativeTime(device.pairedAt)}
+                      </p>
+                      <button
+                        className="btn danger"
+                        disabled={pending}
+                        onClick={() => {
+                          setError(null);
+                          startTransition(async () => {
+                            const res = await sendMessage({
+                              type: "REMOVE_LAN_PEER",
+                              deviceId: device.deviceId,
+                            });
+                            if (!res.ok) {
+                              setError(res.error);
+                              return;
+                            }
+                            if (res.snapshot) onUpdate(res.snapshot);
                           });
-                          if (!res.ok) {
-                            setError(res.error);
-                            return;
-                          }
-                          if (res.snapshot) onUpdate(res.snapshot);
-                        });
-                      }}
-                    >
-                      Unpair
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {!showPairing ? (
-            <button
-              className="btn secondary"
-              disabled={pending}
-              onClick={() => setShowPairing(true)}
-            >
-              Pair new device
-            </button>
-          ) : (
-            <LanPairingPanel
-              compact
-              snapshot={snapshot}
-              lanSignalingMode="local"
-              syncModes={syncModes}
-              onUpdate={(next) => {
-                onUpdate(next);
-                setShowPairing(false);
-              }}
-              onPaired={() => setShowPairing(false)}
-            />
-          )}
-        </div>
+                        }}
+                      >
+                        Unpair
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {!showPairing ? (
+              <button
+                className="btn secondary"
+                disabled={pending}
+                onClick={() => setShowPairing(true)}
+              >
+                Pair new device
+              </button>
+            ) : (
+              <LanPairingPanel
+                compact
+                snapshot={snapshot}
+                lanSignalingMode="local"
+                syncModes={syncModes}
+                onUpdate={(next) => {
+                  onUpdate(next);
+                  setShowPairing(false);
+                }}
+                onPaired={() => setShowPairing(false)}
+              />
+            )}
+          </div>
+        </CollapsibleSection>
       ) : null}
 
-      <div className="panel stack">
-        <M3TextField id="device" label="This device" value={deviceName} onChange={setDeviceName} />
-        <button className="btn secondary" disabled={pending} onClick={saveDevice}>
-          Save device name
-        </button>
-      </div>
+      <CollapsibleSection id="settings-device" title="This device">
+        <div className="panel stack">
+          <M3TextField id="device" label="Device name" value={deviceName} onChange={setDeviceName} />
+          <button className="btn secondary" disabled={pending} onClick={saveDevice}>
+            Save device name
+          </button>
+        </div>
+      </CollapsibleSection>
 
-      <div className="panel stack settings-panel">
-        <span className="section-title" style={{ margin: 0 }}>
-          Privacy
-        </span>
-        <M3SwitchRow
-          title="Record navigation history"
-          checked={snapshot.settings.recordHistory}
-          onChange={(checked) => patchSettings({ recordHistory: checked })}
-          id="settings-record-history"
-        />
-        <M3SwitchRow
-          title="Store URL query parameters"
-          description="Auth-related query keys are always removed"
-          checked={!snapshot.settings.stripQueryParams}
-          onChange={(checked) => patchSettings({ stripQueryParams: !checked })}
-          id="settings-store-query"
-        />
-        <M3SwitchRow
-          title="Store URL fragments (#…)"
-          checked={!snapshot.settings.stripFragments}
-          onChange={(checked) => patchSettings({ stripFragments: !checked })}
-          id="settings-store-fragments"
-        />
-      </div>
+      <CollapsibleSection id="settings-privacy" title="Privacy">
+        <div className="panel stack settings-panel">
+          <M3SwitchRow
+            title="Record navigation history"
+            checked={snapshot.settings.recordHistory}
+            onChange={(checked) => patchSettings({ recordHistory: checked })}
+            id="settings-record-history"
+          />
+          <M3SwitchRow
+            title="Store URL query parameters"
+            description="Auth-related query keys are always removed"
+            checked={!snapshot.settings.stripQueryParams}
+            onChange={(checked) => patchSettings({ stripQueryParams: !checked })}
+            id="settings-store-query"
+          />
+          <M3SwitchRow
+            title="Store URL fragments (#…)"
+            checked={!snapshot.settings.stripFragments}
+            onChange={(checked) => patchSettings({ stripFragments: !checked })}
+            id="settings-store-fragments"
+          />
+        </div>
+      </CollapsibleSection>
 
-      <div className="panel stack">
-        <M3TextArea
-          id="excluded"
-          label="Excluded websites (one host per line)"
-          value={excluded}
-          onChange={setExcluded}
-          rows={4}
-        />
-        <button className="btn secondary" disabled={pending} onClick={saveExcluded}>
-          Save exclusions
-        </button>
-      </div>
+      <CollapsibleSection id="settings-exclusions" title="Excluded websites">
+        <div className="panel stack">
+          <M3TextArea
+            id="excluded"
+            label="One host per line"
+            value={excluded}
+            onChange={setExcluded}
+            rows={4}
+          />
+          <button className="btn secondary" disabled={pending} onClick={saveExcluded}>
+            Save exclusions
+          </button>
+        </div>
+      </CollapsibleSection>
 
       {error ? <p className="error">{error}</p> : null}
     </div>
@@ -304,6 +315,7 @@ function MainView({
   const [name, setName] = useState("");
   const [tetherMode, setTetherMode] = useState<TetherMode>("loose");
   const [showSeriesPanel, setShowSeriesPanel] = useState(false);
+  const [showDetailsPanel, setShowDetailsPanel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const current = snapshot.currentTab;
@@ -349,36 +361,51 @@ function MainView({
         </button>
       </div>
 
-      <div className="panel compact-track sync-status-bar">
-        <div className="row wrap" style={{ justifyContent: "space-between" }}>
-          <span className="pill">{describeSyncModes(snapshot.syncModes)}</span>
-          {lanSummary ? <span className="muted">{lanSummary}</span> : null}
+      <CollapsibleSection
+        id="sync-status"
+        title="Sync"
+        defaultOpen={snapshot.pendingSyncCount > 0}
+        badge={
+          snapshot.pendingSyncCount > 0
+            ? `${snapshot.pendingSyncCount} pending`
+            : describeSyncModes(snapshot.syncModes)
+        }
+      >
+        <div className="panel compact-track sync-status-bar">
+          <div className="row wrap" style={{ justifyContent: "space-between" }}>
+            <span className="pill">{describeSyncModes(snapshot.syncModes)}</span>
+            {lanSummary ? <span className="muted">{lanSummary}</span> : null}
+          </div>
+          {snapshot.pendingSyncCount > 0 ? (
+            <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+              {snapshot.pendingSyncCount} queued update
+              {snapshot.pendingSyncCount === 1 ? "" : "s"} waiting to sync.
+            </p>
+          ) : null}
+          <button
+            className="btn secondary"
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              run(async () => {
+                const res = await sendMessage({ type: "SYNC_NOW" });
+                if (!res.ok) throw new Error(res.error);
+                if (res.snapshot) onUpdate(res.snapshot);
+              })
+            }
+          >
+            {snapshot.pendingSyncCount > 0 ? "Retry sync" : "Sync now"}
+          </button>
         </div>
-        {snapshot.pendingSyncCount > 0 ? (
-          <p className="muted" style={{ margin: 0, fontSize: 12 }}>
-            {snapshot.pendingSyncCount} queued update
-            {snapshot.pendingSyncCount === 1 ? "" : "s"} waiting to sync.
-          </p>
-        ) : null}
-        <button
-          className="btn secondary"
-          type="button"
-          disabled={pending}
-          onClick={() =>
-            run(async () => {
-              const res = await sendMessage({ type: "SYNC_NOW" });
-              if (!res.ok) throw new Error(res.error);
-              if (res.snapshot) onUpdate(res.snapshot);
-            })
-          }
-        >
-          {snapshot.pendingSyncCount > 0 ? "Retry sync" : "Sync now"}
-        </button>
-      </div>
+      </CollapsibleSection>
 
       {snapshot.pendingReconnect.length > 0 ? (
-        <div className="section">
-          <h2 className="section-title">Reconnect</h2>
+        <CollapsibleSection
+          id="reconnect"
+          title="Reconnect"
+          defaultOpen
+          badge={`${snapshot.pendingReconnect.length}`}
+        >
           <div className="list">
             {snapshot.pendingReconnect.slice(0, 3).map((candidate) => (
               <div key={`${candidate.trackedTabId}:${candidate.browserTabId}`} className="panel">
@@ -424,11 +451,21 @@ function MainView({
               </div>
             ))}
           </div>
-        </div>
+        </CollapsibleSection>
       ) : null}
 
-      <div className="section">
-        <h2 className="section-title">Current page</h2>
+      <CollapsibleSection
+        id="current-page"
+        title="Current page"
+        defaultOpen
+        badge={
+          tracked
+            ? tracked.name
+            : current
+              ? current.title || displayHostPath(current.url)
+              : undefined
+        }
+      >
         {!current ? (
           <div className="panel">
             <p className="muted" style={{ margin: 0 }}>
@@ -463,29 +500,28 @@ function MainView({
                 . Off-series pages will not update this tether.
               </p>
             ) : null}
-            <M3TextField id="tracked-name" label="Name" value={name} onChange={setName} />
+            {showDetailsPanel ? (
+              <ActivityMetadataEditor
+                tracked={tracked}
+                snapshot={snapshot}
+                onUpdate={onUpdate}
+                compact
+                onSaved={() => setShowDetailsPanel(false)}
+              />
+            ) : (
+              <button
+                className="btn secondary"
+                disabled={pending}
+                onClick={() => setShowDetailsPanel(true)}
+              >
+                Edit name, emoji, tags…
+              </button>
+            )}
             <p className="url">{displayHostPath(tracked.currentUrl)}</p>
             <p className="muted" style={{ margin: 0, fontSize: 11 }}>
               Last updated from {formatDevice(tracked)} · {relativeTime(tracked.lastUpdatedAt)}
             </p>
             <div className="row wrap">
-              <button
-                className="btn secondary"
-                disabled={pending || !name.trim() || name.trim() === tracked.name}
-                onClick={() =>
-                  run(async () => {
-                    const res = await sendMessage({
-                      type: "RENAME_TAB",
-                      trackedTabId: tracked.id,
-                      name: name.trim(),
-                    });
-                    if (!res.ok) throw new Error(res.error);
-                    if (res.snapshot) onUpdate(res.snapshot);
-                  })
-                }
-              >
-                Save name
-              </button>
               {!current.isActiveOwner ? (
                 <button
                   className="btn"
@@ -688,11 +724,14 @@ function MainView({
             ) : null}
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
       {snapshot.openTabs.length > 0 ? (
-        <div className="section">
-          <h2 className="section-title">Tabs in this window</h2>
+        <CollapsibleSection
+          id="window-tabs"
+          title="Tabs in this window"
+          badge={`${tetheredOpenTabs.length} tethered · ${untetheredOpenTabs.length} untethered`}
+        >
           <div className="list compact-list">
             {snapshot.openTabs.map((tab) => (
               <div
@@ -715,24 +754,22 @@ function MainView({
               </div>
             ))}
           </div>
-          <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-            {tetheredOpenTabs.length} tethered · {untetheredOpenTabs.length} untethered in this
-            window
-          </p>
-        </div>
+        </CollapsibleSection>
       ) : null}
 
-      <div className="section">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h2 className="section-title" style={{ margin: 0 }}>
-            All activities
-          </h2>
-          {snapshot.trackedTabs.length > 0 ? (
+      <CollapsibleSection
+        id="all-activities"
+        title="All activities"
+        defaultOpen={snapshot.trackedTabs.length <= 4}
+        badge={`${snapshot.trackedTabs.length}`}
+        actions={
+          snapshot.trackedTabs.length > 0 ? (
             <button className="btn secondary" type="button" onClick={onOpenResume}>
               Resume…
             </button>
-          ) : null}
-        </div>
+          ) : null
+        }
+      >
         {snapshot.trackedTabs.length === 0 ? (
           <div className="empty">No tethered activities yet.</div>
         ) : (
@@ -772,7 +809,7 @@ function MainView({
             ))}
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
       {error ? <p className="error">{error}</p> : null}
 
