@@ -28,6 +28,19 @@ export function restoreMatchKey(url: string, settings: PrivacySettings): string 
   }
 }
 
+export function reconnectCandidateMatchesTab(
+  candidate: ReconnectCandidate,
+  tab: RestorableBrowserTab,
+  settings: PrivacySettings,
+) {
+  const tabUrl = tabRestoreUrl(tab);
+  if (!tabUrl) return false;
+
+  const candidateKey = restoreMatchKey(candidate.url, settings);
+  const tabKey = restoreMatchKey(tabUrl, settings);
+  return candidateKey !== null && candidateKey === tabKey;
+}
+
 export function matchRestoredBindings(
   browserTabs: RestorableBrowserTab[],
   activities: TrackedTab[],

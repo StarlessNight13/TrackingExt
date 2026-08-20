@@ -34,6 +34,7 @@ import {
   applyBadgeForBrowserTab,
 } from "../lib/tracking";
 import { runCloudDatabaseSpike } from "../lib/cloud-db/spike";
+import { CLOUD_SYNC_ALARM, scheduleCloudSyncAlarm } from "../lib/cloud-sync-alarm";
 import { syncCloudDatabase } from "../sync/cloud-sync";
 import { cloudTabView } from "../sync/cloud-tabs";
 import { withLocalTether } from "../lib/tether-overlay";
@@ -70,6 +71,11 @@ import { getCloudCredentials } from "../storage/cloud-configuration";
 
 async function runFullSync() {
   await syncCloudDatabase({ manual: true });
+}
+
+async function scheduleConfiguredCloudSync() {
+  const credentials = await getCloudCredentials();
+  await scheduleCloudSyncAlarm(browser.alarms, credentials?.behavior);
 }
 
 async function disableUnsupportedLanSync() {
@@ -368,7 +374,7 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
       case "CONFIGURE_CLOUD_DATABASE": {
         const state = await getLocalState();
         const deviceId = await ensureLocalDeviceId();
-        await configureCloudDatabase({
+        const configuration = await configureCloudDatabase({
           url: message.url,
           authToken: message.authToken,
           provider: message.provider,
@@ -377,6 +383,7 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
           deviceName: message.deviceName.trim() || state.deviceName || defaultDeviceName(),
           browser: detectBrowser(),
         });
+        await scheduleCloudSyncAlarm(browser.alarms, configuration.behavior);
         await updateCloudSettings(state.settings);
         await syncCloudDatabase();
         return { ok: true, snapshot: await buildSnapshot() };
@@ -384,6 +391,7 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 
       case "DISCONNECT_CLOUD_DATABASE": {
         await disconnectCloudDatabase();
+        await scheduleCloudSyncAlarm(browser.alarms, undefined);
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
@@ -419,12 +427,7 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 
       case "UPDATE_DATABASE_BEHAVIOR":
         await updateDatabaseBehavior(message.behavior);
-        await browser.alarms.clear("trackingext-sync");
-        if (message.behavior.automaticSync) {
-          browser.alarms.create("trackingext-sync", {
-            periodInMinutes: message.behavior.syncIntervalMinutes,
-          });
-        }
+        await scheduleCloudSyncAlarm(browser.alarms, message.behavior);
         return { ok: true, snapshot: await buildSnapshot() };
 
       case "LIST_CLOUD_GROUPS":
@@ -615,17 +618,12 @@ export default defineBackground(() => {
     }
     void reconcileRestoredTabs();
     void syncCloudDatabase();
+    void scheduleConfiguredCloudSync();
   });
 
-  void getCloudCredentials().then((credentials) => {
-    if (credentials?.behavior.automaticSync) {
-      browser.alarms.create("trackingext-sync", {
-        periodInMinutes: credentials.behavior.syncIntervalMinutes,
-      });
-    }
-  });
+  void scheduleConfiguredCloudSync();
   browser.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name !== "trackingext-sync") return;
+    if (alarm.name !== CLOUD_SYNC_ALARM) return;
     void (async () => {
       try {
         await syncCloudDatabase();

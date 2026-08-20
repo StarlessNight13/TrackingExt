@@ -1,5 +1,10 @@
 import { hasSameHostname } from "./url-pattern";
-import { createInitialSeriesPattern, defaultTetherMode, evaluateSeriesTether, applyManualSeriesPatterns } from "./tether-series";
+import {
+  createInitialSeriesPattern,
+  defaultTetherMode,
+  evaluateSeriesTether,
+  applyManualSeriesPatterns,
+} from "./tether-series";
 import type { SeriesTetherPattern, TetherMode } from "./tether-series";
 import { ensureLocalDeviceId, getEffectiveDeviceId } from "./local-device";
 import { displayHostPath, isExcludedHost, isTrackableUrl, sanitizeUrl } from "./privacy";
@@ -18,7 +23,11 @@ import {
 import { getLocalState, setLocalState } from "./storage";
 import { stripTrackedTabBadge } from "./title-badge";
 import type { ReconnectCandidate, TrackedTab } from "./types";
-import { matchRestoredBindings, tabRestoreUrl } from "./restore-bindings";
+import {
+  matchRestoredBindings,
+  reconnectCandidateMatchesTab,
+  tabRestoreUrl,
+} from "./restore-bindings";
 
 type TitleBadgeMessage =
   | { type: "SET_TRACKED_TITLE_BADGE"; emoji?: string | null }
@@ -273,12 +282,16 @@ export async function openTrackedTab(tracked: TrackedTab, takeOverOwnership = fa
 }
 
 export async function handleTabUpdate(tabId: number, url?: string, title?: string) {
+  let currentTab: { id?: number; url?: string; pendingUrl?: string; title?: string };
+  try {
+    currentTab = await browser.tabs.get(tabId);
+  } catch {
+    currentTab = { id: tabId, url, title };
+  }
+  await prunePendingReconnectForTab(tabId, currentTab);
+
   if (await isRestoreWindowActive()) {
-    try {
-      await considerRestoredTab(await browser.tabs.get(tabId));
-    } catch {
-      await considerRestoredTab({ id: tabId, url, title });
-    }
+    await considerRestoredTab(currentTab);
   }
 
   const state = await getLocalState();
@@ -306,7 +319,9 @@ export async function handleTabUpdate(tabId: number, url?: string, title?: strin
     if (tracked && !hasSameHostname(tracked.currentUrl, sanitized)) return;
   } else if (tracked) {
     const decision = evaluateSeriesTether({
-      pattern: tracked.seriesPattern ?? createInitialSeriesPattern(tracked.currentUrl, tracked.currentTitle),
+      pattern:
+        tracked.seriesPattern ??
+        createInitialSeriesPattern(tracked.currentUrl, tracked.currentTitle),
       url: sanitized,
       title: cleanTitle,
       previousUrl: tracked.currentUrl,
@@ -340,6 +355,7 @@ export async function handleTabUpdate(tabId: number, url?: string, title?: strin
 }
 
 export async function handleTabRemoved(tabId: number) {
+  await prunePendingReconnectForTab(tabId);
   const state = await getLocalState();
   const trackedTabId = state.bindings[bindingKey(tabId)];
   if (!trackedTabId) return;
@@ -401,7 +417,9 @@ function restoreDeviceIds(
   state: { deviceId: string | null; localDeviceId: string | null },
   effectiveId: string,
 ) {
-  return [effectiveId, state.deviceId, state.localDeviceId].filter((id): id is string => Boolean(id));
+  return [effectiveId, state.deviceId, state.localDeviceId].filter((id): id is string =>
+    Boolean(id),
+  );
 }
 
 function mergePendingReconnect(existing: ReconnectCandidate[], incoming: ReconnectCandidate[]) {
@@ -414,6 +432,21 @@ function mergePendingReconnect(existing: ReconnectCandidate[], incoming: Reconne
     merged.push(item);
   }
   return merged;
+}
+
+async function prunePendingReconnectForTab(
+  tabId: number,
+  tab?: { id?: number; url?: string; pendingUrl?: string },
+) {
+  const state = await getLocalState();
+  const pendingReconnect = state.pendingReconnect.filter(
+    (candidate) =>
+      candidate.browserTabId !== tabId ||
+      (tab !== undefined && reconnectCandidateMatchesTab(candidate, tab, state.settings)),
+  );
+  if (pendingReconnect.length !== state.pendingReconnect.length) {
+    await setLocalState({ pendingReconnect });
+  }
 }
 
 function browserTabRestoreFields(tab: { id?: number; url?: string; pendingUrl?: string }) {
@@ -496,7 +529,9 @@ export async function reconcileRestoredTabs() {
       if (liveTabIds.has(tabId) && !bindings[tabId]) keptBindings[tabId] = trackedId;
     }
 
-    const sawTrackable = browserTabs.some((tab) => Boolean(tabRestoreUrl(tab) && isTrackableUrl(tabRestoreUrl(tab))));
+    const sawTrackable = browserTabs.some((tab) =>
+      Boolean(tabRestoreUrl(tab) && isTrackableUrl(tabRestoreUrl(tab))),
+    );
     if (!sawTrackable && Object.keys(bindings).length === 0) {
       return;
     }
@@ -516,15 +551,37 @@ export async function reconcileRestoredTabs() {
 }
 
 export async function confirmReconnect(candidate: ReconnectCandidate, takeOverOwnership = true) {
-  await setBinding(candidate.browserTabId, candidate.trackedTabId);
-  if (takeOverOwnership) {
-    await takeOver(candidate.trackedTabId, candidate.browserTabId);
-  }
   const state = await getLocalState();
+  const pendingCandidate = state.pendingReconnect.find(
+    (pending) =>
+      pending.trackedTabId === candidate.trackedTabId &&
+      pending.browserTabId === candidate.browserTabId,
+  );
+  if (!pendingCandidate) throw new Error("Reconnect request is no longer available");
+
+  let browserTab: { id?: number; url?: string; pendingUrl?: string } | undefined;
+  try {
+    browserTab = await browser.tabs.get(candidate.browserTabId);
+  } catch {
+    // A browser tab can close between rendering the popup and confirming its reconnect prompt.
+  }
+  if (!browserTab || !reconnectCandidateMatchesTab(pendingCandidate, browserTab, state.settings)) {
+    await prunePendingReconnectForTab(pendingCandidate.browserTabId, browserTab);
+    throw new Error("Reconnect request is no longer available");
+  }
+
+  await setBinding(pendingCandidate.browserTabId, pendingCandidate.trackedTabId);
+  if (takeOverOwnership) {
+    await takeOver(pendingCandidate.trackedTabId, pendingCandidate.browserTabId);
+  }
+  const latestState = await getLocalState();
   await setLocalState({
-    pendingReconnect: state.pendingReconnect.filter(
+    pendingReconnect: latestState.pendingReconnect.filter(
       (p) =>
-        !(p.trackedTabId === candidate.trackedTabId && p.browserTabId === candidate.browserTabId),
+        !(
+          p.trackedTabId === pendingCandidate.trackedTabId &&
+          p.browserTabId === pendingCandidate.browserTabId
+        ),
     ),
   });
 }

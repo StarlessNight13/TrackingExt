@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { matchRestoredBindings, restoreMatchKey, tabRestoreUrl } from "./restore-bindings";
+import {
+  matchRestoredBindings,
+  reconnectCandidateMatchesTab,
+  restoreMatchKey,
+  tabRestoreUrl,
+} from "./restore-bindings";
 import { DEFAULT_SETTINGS, type TrackedTab } from "./types";
 
-function activity(overrides: Partial<TrackedTab> & Pick<TrackedTab, "id" | "currentUrl">): TrackedTab {
+function activity(
+  overrides: Partial<TrackedTab> & Pick<TrackedTab, "id" | "currentUrl">,
+): TrackedTab {
   return {
     name: overrides.name ?? overrides.id,
     emoji: null,
@@ -34,10 +41,42 @@ describe("restoreMatchKey", () => {
 describe("tabRestoreUrl", () => {
   it("prefers the loaded url and falls back to pendingUrl during session restore", () => {
     expect(tabRestoreUrl({ id: 1, url: "https://example.com/a" })).toBe("https://example.com/a");
-    expect(tabRestoreUrl({ id: 1, pendingUrl: "https://example.com/b" })).toBe("https://example.com/b");
+    expect(tabRestoreUrl({ id: 1, pendingUrl: "https://example.com/b" })).toBe(
+      "https://example.com/b",
+    );
     expect(tabRestoreUrl({ id: 1, url: "about:blank", pendingUrl: "https://example.com/c" })).toBe(
       "https://example.com/c",
     );
+  });
+
+  describe("reconnectCandidateMatchesTab", () => {
+    const candidate = {
+      trackedTabId: "tracked_1",
+      trackedTabName: "Example",
+      url: "https://www.example.com/article/",
+      title: null,
+      browserTabId: 5,
+    };
+
+    it("keeps a candidate while a restored tab has an equivalent pending URL", () => {
+      expect(
+        reconnectCandidateMatchesTab(
+          candidate,
+          { id: 5, url: "about:blank", pendingUrl: "https://example.com/article" },
+          DEFAULT_SETTINGS,
+        ),
+      ).toBe(true);
+    });
+
+    it("rejects a candidate after its restored tab navigates elsewhere", () => {
+      expect(
+        reconnectCandidateMatchesTab(
+          candidate,
+          { id: 5, url: "https://example.com/other" },
+          DEFAULT_SETTINGS,
+        ),
+      ).toBe(false);
+    });
   });
 });
 
