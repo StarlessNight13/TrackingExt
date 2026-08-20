@@ -1,6 +1,6 @@
 {
   "name": "tabtether",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Local-first tethered tabs with optional cloud database and LAN sync",
   "type": "module",
