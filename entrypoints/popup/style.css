@@ -213,6 +213,78 @@ a {
   color: var(--ink-muted);
 }
 
+.collapsible-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.collapsible-section__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  border-radius: var(--radius-sm);
+}
+
+.collapsible-section__toggle:hover {
+  color: var(--ink);
+}
+
+.collapsible-section__toggle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.collapsible-section__chevron {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+  margin-top: -2px;
+}
+
+.collapsible-section--open .collapsible-section__chevron {
+  transform: rotate(45deg);
+  margin-top: 2px;
+}
+
+.collapsible-section__title {
+  flex: 1;
+  min-width: 0;
+}
+
+.collapsible-section__badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collapsible-section__actions {
+  flex-shrink: 0;
+}
+
+.collapsible-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .panel {
   display: flex;
   flex-direction: column;

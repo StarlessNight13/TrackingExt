@@ -189,8 +189,14 @@ export async function stopTracking(trackedTabId: string) {
   await clearBindingsForTrackedTab(trackedTabId);
 }
 
-export async function renameTrackedTab(id: string, name: string, emoji?: string | null) {
-  const updated = await syncRenameTab(id, name, emoji);
+export async function renameTrackedTab(
+  id: string,
+  name: string,
+  emoji?: string | null,
+  tags?: string[],
+  groupId?: string | null,
+) {
+  const updated = await syncRenameTab(id, name, emoji, tags, groupId);
   if (!updated) throw new Error("Tethered tab not found");
   const state = await getLocalState();
   await Promise.all(

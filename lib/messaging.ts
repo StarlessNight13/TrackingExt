@@ -61,6 +61,14 @@ export type ExtensionRequest =
   | { type: "STOP_TRACKING"; trackedTabId: string }
   | { type: "RENAME_TAB"; trackedTabId: string; name: string; emoji?: string | null }
   | {
+      type: "UPDATE_TAB";
+      trackedTabId: string;
+      name: string;
+      emoji?: string | null;
+      tags?: string[];
+      groupId?: string | null;
+    }
+  | {
       type: "UPDATE_SERIES_TETHER";
       trackedTabId: string;
       tetherMode?: TetherMode;
