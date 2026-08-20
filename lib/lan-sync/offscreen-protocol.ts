@@ -4,8 +4,6 @@ export const OFFSCREEN_TARGET = "lan-offscreen";
 export const OFFSCREEN_PATH = "/offscreen.html";
 
 export type OffscreenLanRequest =
-  | { type: "SYNC_LAN_MANAGER" }
-  | { type: "RECONNECT_LAN_PEERS" }
   | { type: "REMOVE_LAN_PEER"; deviceId: string }
   | { type: "START_LOCAL_LAN_PAIRING" }
   | { type: "JOIN_LOCAL_LAN_PAIRING"; offerToken: string }

@@ -1,4 +1,4 @@
-import { adoptLanPairedConnection, syncLanManager } from "./manager";
+import { adoptLanPairedConnection } from "./manager";
 import { savePairedLanDevice } from "./paired-devices";
 import { acceptOfferConnection, createOfferConnection, finalizeAnswerConnection } from "./webrtc";
 import { ensureLocalDeviceId, getEffectiveDeviceName } from "../local-device";
@@ -90,7 +90,6 @@ export async function joinLocalPairingSession(
   });
 
   adoptLanPairedConnection(offer.deviceId, pc, incomingChannel);
-  await syncLanManager();
 
   return {
     answerToken: encodePayload({
@@ -122,7 +121,6 @@ export async function completeLocalPairingSession(answerToken: string) {
   });
 
   adoptLanPairedConnection(answer.deviceId, host.pc, host.channel);
-  await syncLanManager();
 }
 
 export function cancelLocalPairingSession() {

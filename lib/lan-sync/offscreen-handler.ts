@@ -1,4 +1,4 @@
-import { isLanPeerOnline, reconnectLanPeers, removeLanPeer, syncLanManager } from "./manager";
+import { isLanPeerOnline, removeLanPeer } from "./manager";
 import {
   cancelLocalPairingSession,
   completeLocalPairingSession,
@@ -13,14 +13,6 @@ export async function handleOffscreenLanMessage(
 ): Promise<OffscreenLanResponse> {
   try {
     switch (message.type) {
-      case "SYNC_LAN_MANAGER":
-        await syncLanManager();
-        return { ok: true };
-
-      case "RECONNECT_LAN_PEERS":
-        await reconnectLanPeers();
-        return { ok: true };
-
       case "REMOVE_LAN_PEER":
         await removeLanPeer(message.deviceId);
         return { ok: true };

@@ -2,9 +2,7 @@ import { defaultDeviceName, detectBrowser, renameDevice } from "../lib/device";
 import {
   callOffscreenLan,
   getLanStatusFromOffscreen,
-  reconnectLanPeersViaOffscreen,
   removeLanPeerViaOffscreen,
-  syncLanManagerViaOffscreen,
 } from "../lib/lan-sync/offscreen-bridge";
 import { isOffscreenLanMessage } from "../lib/lan-sync/offscreen-protocol";
 import { handleStorageBridgeMessage } from "../lib/storage-bridge-handler";
@@ -54,7 +52,7 @@ import {
   listConflicts,
   listDatabaseLogs,
 } from "../storage/indexed-db";
-import type { PrivacySettings, SyncModes } from "../lib/types";
+import type { PrivacySettings } from "../lib/types";
 import {
   clearCloudHistory,
   deleteCloudGroup,
@@ -72,10 +70,6 @@ import { getCloudCredentials } from "../storage/cloud-configuration";
 
 async function runFullSync() {
   await syncCloudDatabase({ manual: true });
-  const state = await getLocalState();
-  if (state.syncModes.lan) {
-    await reconnectLanPeersViaOffscreen();
-  }
 }
 
 async function disableUnsupportedLanSync() {
@@ -280,7 +274,6 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
           syncModes,
           lanSignalingMode: resolveLanSignalingMode(),
         });
-        await syncLanManagerViaOffscreen();
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
@@ -290,7 +283,6 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
           throw new Error("Enable LAN sync first");
         }
         await setLocalState({ lanSignalingMode: message.lanSignalingMode });
-        await syncLanManagerViaOffscreen();
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
@@ -333,11 +325,6 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
-      case "RECONNECT_LAN": {
-        await reconnectLanPeersViaOffscreen();
-        return { ok: true, snapshot: await buildSnapshot() };
-      }
-
       case "SYNC_NOW": {
         await runFullSync();
         return { ok: true, snapshot: await buildSnapshot() };
@@ -353,7 +340,6 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
       }
 
       case "CLEAR_HISTORY": {
-        const state = await getLocalState();
         if (await getCloudCredentials()) {
           await clearCloudHistory(message.trackedTabId);
         } else {
@@ -363,7 +349,6 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
       }
 
       case "GET_HISTORY": {
-        const state = await getLocalState();
         if (await getCloudCredentials()) {
           const history = await getCloudHistory(message.trackedTabId);
           return { ok: true, history, snapshot: await buildSnapshot() };
@@ -540,17 +525,6 @@ async function trackFromContextMenu(tabId: number | undefined) {
   }
 }
 
-async function startLanSyncIfEnabled() {
-  if (!supportsLanSync) return;
-  try {
-    const state = await getLocalState();
-    if (!state.syncModes.lan) return;
-    await syncLanManagerViaOffscreen();
-  } catch (error) {
-    console.warn("[TabTether] LAN sync startup failed:", error);
-  }
-}
-
 const RESUME_COMMAND = "resume-activity";
 
 async function openResumePicker() {
@@ -595,7 +569,6 @@ export default defineBackground(() => {
   if (!import.meta.env.BROWSER || import.meta.env.BROWSER !== "firefox-android") {
     void ensureContextMenus();
   }
-  void startLanSyncIfEnabled();
   void syncCloudDatabase();
 
   if (import.meta.env.BROWSER !== "firefox-android") {
@@ -633,7 +606,6 @@ export default defineBackground(() => {
       void ensureContextMenus();
     }
     void reconcileRestoredTabs();
-    void startLanSyncIfEnabled();
   });
 
   browser.runtime.onStartup.addListener(() => {
@@ -642,7 +614,6 @@ export default defineBackground(() => {
       void ensureContextMenus();
     }
     void reconcileRestoredTabs();
-    void startLanSyncIfEnabled();
     void syncCloudDatabase();
   });
 
@@ -653,14 +624,7 @@ export default defineBackground(() => {
       });
     }
   });
-  if (supportsLanSync) {
-    browser.alarms.create("trackingext-lan", { periodInMinutes: 1 });
-  }
   browser.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === "trackingext-lan") {
-      void startLanSyncIfEnabled();
-      return;
-    }
     if (alarm.name !== "trackingext-sync") return;
     void (async () => {
       try {

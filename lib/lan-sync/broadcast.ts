@@ -1,5 +1,5 @@
 import type { HistoryEntry, TrackedTab } from "../types";
-import { getLocalState, setLocalState } from "../storage";
+import { getLocalState } from "../storage";
 import { applyPeerTabUpdate, syncDeleteTabFromPeer } from "../sync/router";
 import { mergePeerHistory, pickHistoryForTabs } from "../sync/history-sync";
 
@@ -23,7 +23,8 @@ export function registerLanChannel(peerDeviceId: string, channel: RTCDataChannel
   });
 }
 
-export function unregisterLanChannel(peerDeviceId: string) {
+export function unregisterLanChannel(peerDeviceId: string, channel?: RTCDataChannel) {
+  if (channel && channels.get(peerDeviceId) !== channel) return;
   channels.delete(peerDeviceId);
 }
 

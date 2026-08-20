@@ -165,7 +165,8 @@ function SettingsView({
         >
           <div className="panel stack">
             <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-              Pair via copied tokens. Reconnect after restart requires re-pairing.
+              Pair via copied tokens. A connection lasts only while both browsers stay open; an
+              Offline peer needs a new pairing exchange.
             </p>
             {snapshot.pairedLanDevices.length === 0 ? (
               <p className="muted" style={{ margin: 0, fontSize: 11 }}>
@@ -283,6 +284,7 @@ function SettingsView({
       </CollapsibleSection>
 
       {error ? <p className="error">{error}</p> : null}
+
     </div>
   );
 }
@@ -812,7 +814,6 @@ function MainView({
       </CollapsibleSection>
 
       {error ? <p className="error">{error}</p> : null}
-
     </div>
   );
 }

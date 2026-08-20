@@ -399,7 +399,7 @@ function LocalTabsPanel({
                         >
                           Untether tab
                         </button>
-                    </TabActionsMenu>
+                      </TabActionsMenu>
                   </>
                 )}
               </div>
@@ -446,6 +446,9 @@ function LocalLanPanel({
         <span className="section-title" style={{ margin: 0 }}>
           Paired devices
         </span>
+        <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+          Connections last only while both browsers stay open. Offline devices must be paired again.
+        </p>
         {snapshot.pairedLanDevices.length === 0 ? (
           <p className="muted" style={{ margin: 0, fontSize: 11 }}>
             No paired devices yet.

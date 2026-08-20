@@ -8,22 +8,30 @@ import { removePairedLanDevice } from "./paired-devices";
 
 const connections = new Map<string, RTCPeerConnection>();
 
-export async function syncLanManager() {}
-export async function reconnectLanPeers() {}
-
 export function adoptLanPairedConnection(
   peerDeviceId: string,
   pc: RTCPeerConnection,
   channel?: RTCDataChannel,
 ) {
+  connections.get(peerDeviceId)?.close();
   connections.set(peerDeviceId, pc);
-  if (!channel) return;
-  registerLanChannel(peerDeviceId, channel);
-  if (channel.readyState === "open") void sendLanSnapshot(channel);
-  else channel.addEventListener("open", () => void sendLanSnapshot(channel));
+
+  const clearConnection = () => {
+    if (connections.get(peerDeviceId) !== pc) return;
+    connections.delete(peerDeviceId);
+    unregisterLanChannel(peerDeviceId, channel);
+  };
+
+  if (channel) {
+    registerLanChannel(peerDeviceId, channel);
+    if (channel.readyState === "open") void sendLanSnapshot(channel);
+    else channel.addEventListener("open", () => void sendLanSnapshot(channel));
+    channel.addEventListener("close", clearConnection, { once: true });
+  }
+
   pc.addEventListener("connectionstatechange", () => {
     if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
-      unregisterLanChannel(peerDeviceId);
+      clearConnection();
     }
   });
 }

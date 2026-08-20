@@ -89,14 +89,6 @@ export async function callOffscreenLan(request: OffscreenLanRequest): Promise<Of
   return response;
 }
 
-export async function syncLanManagerViaOffscreen() {
-  await callOffscreenLan({ type: "SYNC_LAN_MANAGER" });
-}
-
-export async function reconnectLanPeersViaOffscreen() {
-  await callOffscreenLan({ type: "RECONNECT_LAN_PEERS" });
-}
-
 export async function removeLanPeerViaOffscreen(deviceId: string) {
   await callOffscreenLan({ type: "REMOVE_LAN_PEER", deviceId });
 }

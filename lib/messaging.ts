@@ -88,7 +88,6 @@ export type ExtensionRequest =
   | { type: "JOIN_LOCAL_LAN_PAIRING"; offerToken: string }
   | { type: "COMPLETE_LOCAL_LAN_PAIRING"; answerToken: string }
   | { type: "CANCEL_LOCAL_LAN_PAIRING" }
-  | { type: "RECONNECT_LAN" }
   | { type: "SYNC_NOW" }
   | { type: "REMOVE_LAN_PEER"; deviceId: string }
   | { type: "REFRESH" }
