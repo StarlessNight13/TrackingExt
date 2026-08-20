@@ -12,6 +12,7 @@ import {
   updateOfflineTabLocation,
 } from "./offline-store";
 import { broadcastLanTabEvent } from "../lan-sync/broadcast";
+import { shouldRecordHistory } from "../../core/privacy";
 import { getCloudCredentials, getCloudSummary } from "../../storage/cloud-configuration";
 import { listCachedTabs } from "../../storage/indexed-db";
 import {
@@ -41,7 +42,7 @@ export async function listKnownTrackedTabs(): Promise<TrackedTab[]> {
   return [...fromCloud, ...state.cachedTabs.filter((tab) => !cloudIds.has(tab.id))];
 }
 
-async function persistCachedTab(tab: TrackedTab) {
+export async function persistCachedTab(tab: TrackedTab) {
   const state = await getLocalState();
   await setLocalState({ cachedTabs: mergeTabList(state, tab) });
   return state;
@@ -122,12 +123,16 @@ export async function syncUpdateTabLocation(input: {
   title?: string | null;
 }): Promise<TrackedTab | null> {
   const state = await getLocalState();
+  const existing = await findSyncedTab(input.tabId);
+  const recordHistory = existing
+    ? shouldRecordHistory(state.settings, existing.isPrivate)
+    : state.settings.recordHistory;
   if (await getCloudCredentials()) {
     const tab = await updateCloudTabLocation(
       input.tabId,
       input.url,
       input.title ?? null,
-      state.settings.recordHistory,
+      recordHistory,
     );
     if (tab && state.syncModes.lan) void broadcastLanTabEvent({ type: "tab_updated", tab });
     return tab;
@@ -199,15 +204,23 @@ export async function syncRenameTab(
   emoji?: string | null,
   tags?: string[],
   groupId?: string | null,
+  isPrivate?: boolean,
 ): Promise<TrackedTab | null> {
   const state = await getLocalState();
   if (await getCloudCredentials()) {
-    const tab = await renameCloudTab(tabId, name, emoji, tags, groupId);
-    if (tab) await persistCachedTab({ ...tab, tags: tags ?? tab.tags, groupId: groupId ?? tab.groupId });
+    const tab = await renameCloudTab(tabId, name, emoji, tags, groupId, isPrivate);
+    if (tab) {
+      await persistCachedTab({
+        ...tab,
+        tags: tags ?? tab.tags,
+        groupId: groupId ?? tab.groupId,
+        isPrivate: isPrivate ?? tab.isPrivate,
+      });
+    }
     if (tab && state.syncModes.lan) void broadcastLanTabEvent({ type: "tab_updated", tab });
     return tab;
   }
-  let tab = await renameOfflineTab(tabId, name, emoji, tags, groupId);
+  let tab = await renameOfflineTab(tabId, name, emoji, tags, groupId, isPrivate);
 
   if (tab && state.syncModes.lan) {
     void broadcastLanTabEvent({ type: "tab_updated", tab });

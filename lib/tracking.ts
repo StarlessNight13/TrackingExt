@@ -8,7 +8,9 @@ import {
 import type { SeriesTetherPattern, TetherMode } from "./tether-series";
 import { ensureLocalDeviceId, getEffectiveDeviceId } from "./local-device";
 import { displayHostPath, isExcludedHost, isTrackableUrl, sanitizeUrl } from "./privacy";
-import { releaseOfflineTab } from "./sync/offline-store";
+import { clearCloudHistory } from "../db/cloud-management";
+import { getCloudCredentials } from "../storage/cloud-configuration";
+import { releaseOfflineTab, clearOfflineHistory } from "./sync/offline-store";
 import {
   syncCreateTab,
   syncDeleteTab,
@@ -101,6 +103,14 @@ export async function clearBindingsForTrackedTab(trackedTabId: string) {
     if (id !== trackedTabId) next[tabId] = id;
   }
   await setLocalState({ bindings: next });
+}
+
+export async function releaseTrackedTabBindings(trackedTabId: string) {
+  const state = await getLocalState();
+  await Promise.all(
+    getBoundTabIds(state.bindings, trackedTabId).map((tabId) => clearTrackedTitleBadge(tabId)),
+  );
+  await clearBindingsForTrackedTab(trackedTabId);
 }
 
 export async function trackCurrentTab(
@@ -204,9 +214,20 @@ export async function renameTrackedTab(
   emoji?: string | null,
   tags?: string[],
   groupId?: string | null,
+  isPrivate?: boolean,
 ) {
-  const updated = await syncRenameTab(id, name, emoji, tags, groupId);
+  const existing = await findSyncedTab(id);
+  const updated = await syncRenameTab(id, name, emoji, tags, groupId, isPrivate);
   if (!updated) throw new Error("Tethered tab not found");
+
+  if (isPrivate === true && existing && !existing.isPrivate) {
+    if (await getCloudCredentials()) {
+      await clearCloudHistory(id);
+    } else {
+      await clearOfflineHistory(id);
+    }
+  }
+
   const state = await getLocalState();
   await Promise.all(
     getBoundTabIds(state.bindings, id).map((tabId) => applyTrackedTitleBadge(tabId, updated.emoji)),

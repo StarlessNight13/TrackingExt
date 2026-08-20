@@ -3,8 +3,9 @@ import { createId } from "../core/ids";
 import type { TrackedTab } from "../lib/types";
 import { getCloudCredentials } from "../storage/cloud-configuration";
 import { listCachedTabs } from "../storage/indexed-db";
-import { syncCloudDatabase } from "./cloud-sync";
+import { requestCloudSync } from "./coordinator";
 import { enqueueOptimisticTab } from "./outbox";
+import { cloudSyncTriggerForKind } from "./sync-triggers";
 
 export function cloudTabView(tab: TrackedTabRecord): TrackedTab {
   return {
@@ -81,13 +82,13 @@ export async function createCloudTab(input: {
     ...(tab as unknown as Record<string, unknown>),
     recordHistory: input.recordHistory,
   });
-  void syncCloudDatabase();
+  void requestCloudSync("activity");
   return cloudTabView(tab);
 }
 
 async function mutateCloudTab(
   id: string,
-  kind: "update_location" | "rename" | "delete" | "takeover",
+  kind: "update_location" | "rename" | "delete" | "takeover" | "archive" | "restore",
   payload: Record<string, unknown>,
 ) {
   const cloud = await getCloudCredentials();
@@ -110,6 +111,8 @@ async function mutateCloudTab(
                 ? null
                 : String(payload.groupId)
               : tab.groupId,
+          isPrivate:
+            payload.isPrivate !== undefined ? Boolean(payload.isPrivate) : Boolean(tab.isPrivate),
         }
       : null;
   const optimistic: TrackedTabRecord = {
@@ -128,16 +131,19 @@ async function mutateCloudTab(
           emoji: renamePayload.emoji,
           tags: JSON.stringify(renamePayload.tags),
           groupId: renamePayload.groupId,
+          isPrivate: renamePayload.isPrivate ? 1 : 0,
         }
       : {}),
     ...(kind === "delete" ? { deletedAt: now, activeDeviceId: null } : {}),
+    ...(kind === "archive" ? { archivedAt: now, activeDeviceId: null } : {}),
+    ...(kind === "restore" ? { archivedAt: null } : {}),
     ...(kind === "takeover"
       ? { activeDeviceId: cloud.deviceId, lastUpdatedDeviceId: cloud.deviceId }
       : {}),
     updatedAt: now,
   };
   await enqueueOptimisticTab(optimistic, kind, renamePayload ?? payload);
-  void syncCloudDatabase();
+  void requestCloudSync(cloudSyncTriggerForKind(kind));
   return cloudTabView(optimistic);
 }
 
@@ -153,6 +159,9 @@ export const renameCloudTab = (
   emoji?: string | null,
   tags?: string[],
   groupId?: string | null,
-) => mutateCloudTab(id, "rename", { name, emoji, tags, groupId });
+  isPrivate?: boolean,
+) => mutateCloudTab(id, "rename", { name, emoji, tags, groupId, isPrivate });
 export const deleteCloudTab = (id: string) => mutateCloudTab(id, "delete", {});
 export const takeOverCloudTab = (id: string) => mutateCloudTab(id, "takeover", {});
+export const archiveCloudTab = (id: string) => mutateCloudTab(id, "archive", {});
+export const restoreCloudTab = (id: string) => mutateCloudTab(id, "restore", {});

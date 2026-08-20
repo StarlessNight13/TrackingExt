@@ -1,8 +1,9 @@
 import { normalizeCloudDatabaseUrl } from "../lib/cloud-db/spike";
 import { bootstrapDatabase } from "../db/bootstrap";
 import {
-  DEFAULT_DATABASE_BEHAVIOR,
-  type DatabaseBehavior,
+  DEFAULT_CLOUD_SYNC_POLICY,
+  migrateCloudSyncPolicy,
+  type CloudSyncPolicy,
   type DatabaseProvider,
   withDatabaseClient,
 } from "../services/database-service";
@@ -13,7 +14,7 @@ export type CloudConfiguration = {
   workspaceId: string;
   deviceId: string;
   tokenPersistence: "persistent" | "session";
-  behavior: DatabaseBehavior;
+  behavior: CloudSyncPolicy;
 };
 
 const CONFIG_KEY = "cloudConfiguration";
@@ -38,7 +39,7 @@ export async function getCloudCredentials() {
     ? {
         ...configuration,
         provider: configuration.provider ?? "libsql",
-        behavior: configuration.behavior ?? DEFAULT_DATABASE_BEHAVIOR,
+        behavior: migrateCloudSyncPolicy(configuration.behavior),
         url: normalizeCloudDatabaseUrl(configuration.url),
         authToken: token,
       }
@@ -53,7 +54,7 @@ export async function configureCloudDatabase(input: {
   deviceName: string;
   browser: string;
   provider?: DatabaseProvider;
-  behavior?: DatabaseBehavior;
+  behavior?: CloudSyncPolicy;
 }) {
   const url = normalizeCloudDatabaseUrl(input.url);
   const authToken = input.authToken.trim();
@@ -74,7 +75,7 @@ export async function configureCloudDatabase(input: {
     workspaceId: bootstrap.workspaceId,
     deviceId: bootstrap.deviceId,
     tokenPersistence: input.tokenPersistence,
-    behavior: input.behavior ?? DEFAULT_DATABASE_BEHAVIOR,
+    behavior: migrateCloudSyncPolicy(input.behavior ?? DEFAULT_CLOUD_SYNC_POLICY),
   };
   await Promise.all([
     browser.storage.local.set({
@@ -98,11 +99,13 @@ export async function disconnectCloudDatabase() {
   await setCloudStatus({ state: "disconnected", lastSyncAt: null, lastError: null });
 }
 
-export async function updateDatabaseBehavior(behavior: DatabaseBehavior) {
+export async function updateDatabaseBehavior(behavior: CloudSyncPolicy) {
   const stored = await browser.storage.local.get(CONFIG_KEY);
   const configuration = stored[CONFIG_KEY] as CloudConfiguration | undefined;
   if (!configuration) throw new Error("Connect a database first");
-  await browser.storage.local.set({ [CONFIG_KEY]: { ...configuration, behavior } });
+  await browser.storage.local.set({
+    [CONFIG_KEY]: { ...configuration, behavior: migrateCloudSyncPolicy(behavior) },
+  });
 }
 
 export async function getCloudSummary() {
@@ -122,7 +125,13 @@ export async function getCloudSummary() {
       : typeof stored[TOKEN_KEY] === "string"
     : false;
   return {
-    configuration: configuration ?? null,
+    configuration:
+      configuration == null
+        ? null
+        : {
+            ...configuration,
+            behavior: migrateCloudSyncPolicy(configuration.behavior),
+          },
     status:
       configuration && !hasToken
         ? {

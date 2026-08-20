@@ -3,7 +3,14 @@ import type { TrackedTabRecord } from "../core/entities";
 export const DATABASE_NAME = "trackingext";
 export const DATABASE_VERSION = 2;
 
-export type OutboxKind = "create" | "update_location" | "rename" | "delete" | "takeover";
+export type OutboxKind =
+  | "create"
+  | "update_location"
+  | "rename"
+  | "delete"
+  | "takeover"
+  | "archive"
+  | "restore";
 
 export type OutboxOperation = {
   version: 1;

@@ -4,6 +4,7 @@ import { normalizeTags } from "@/core/validation";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import type { TrackedTab } from "@/lib/types";
 import { M3Select, M3TextField } from "../entrypoints/popup/components/m3-text-field";
+import { M3SwitchRow } from "../entrypoints/popup/components/m3-switch";
 
 type CloudGroup = {
   id: string;
@@ -39,6 +40,7 @@ export function ActivityMetadataEditor({
   const [emoji, setEmoji] = useState(tracked.emoji ?? "");
   const [tagsInput, setTagsInput] = useState(formatTagsInput(tracked.tags));
   const [groupId, setGroupId] = useState(tracked.groupId ?? "");
+  const [isPrivate, setIsPrivate] = useState(tracked.isPrivate);
   const [groups, setGroups] = useState<CloudGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -50,7 +52,8 @@ export function ActivityMetadataEditor({
     setEmoji(tracked.emoji ?? "");
     setTagsInput(formatTagsInput(tracked.tags));
     setGroupId(tracked.groupId ?? "");
-  }, [tracked.id, tracked.name, tracked.emoji, tracked.tags, tracked.groupId]);
+    setIsPrivate(tracked.isPrivate);
+  }, [tracked.id, tracked.name, tracked.emoji, tracked.tags, tracked.groupId, tracked.isPrivate]);
 
   useEffect(() => {
     if (!showGroups) return;
@@ -72,6 +75,7 @@ export function ActivityMetadataEditor({
           emoji: emoji.trim() || null,
           tags,
           groupId: groupId || null,
+          isPrivate,
         });
         if (!res.ok) throw new Error(res.error);
         if (res.snapshot) onUpdate(res.snapshot);
@@ -86,7 +90,8 @@ export function ActivityMetadataEditor({
     name.trim() !== tracked.name ||
     (emoji.trim() || null) !== (tracked.emoji ?? null) ||
     formatTagsInput(normalizeTags(parseTagsInput(tagsInput))) !== formatTagsInput(tracked.tags) ||
-    (groupId || null) !== (tracked.groupId ?? null);
+    (groupId || null) !== (tracked.groupId ?? null) ||
+    isPrivate !== tracked.isPrivate;
 
   return (
     <div className={`stack${compact ? "" : " panel"}`}>
@@ -113,6 +118,13 @@ export function ActivityMetadataEditor({
       <p className="muted" style={{ margin: 0, fontSize: 11 }}>
         Comma-separated tags. Used in search and resume.
       </p>
+      <M3SwitchRow
+        title="Private activity"
+        description="Do not record navigation history for this activity."
+        checked={isPrivate}
+        onChange={setIsPrivate}
+        id={`meta-private-${tracked.id}`}
+      />
       {showGroups ? (
         <>
           <M3Select

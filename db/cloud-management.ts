@@ -96,10 +96,13 @@ async function withDatabase<T>(run: (client: DatabaseClient, workspaceId: string
 export const listCloudGroups = () =>
   withDatabase(async (client, workspaceId) => {
     const result = await client.execute({
-      sql: `SELECT g.*, count(t.id) activity_count FROM "group" g
-        LEFT JOIN tracked_tab t ON t.group_id = g.id AND t.deleted_at IS NULL
+      sql: `SELECT g.*,
+        (SELECT count(*) FROM tracked_tab t WHERE t.group_id = g.id AND t.deleted_at IS NULL) AS activity_count,
+        pinned.name AS pinned_name, pinned.emoji AS pinned_emoji, pinned.current_url AS pinned_url
+        FROM "group" g
+        LEFT JOIN tracked_tab pinned ON pinned.id = g.pinned_tracked_tab_id AND pinned.deleted_at IS NULL
         WHERE g.workspace_id = ? AND g.deleted_at IS NULL
-        GROUP BY g.id ORDER BY g.name`,
+        ORDER BY g.name`,
       args: [workspaceId],
     });
     return result.rows.map((row) => ({
@@ -108,6 +111,16 @@ export const listCloudGroups = () =>
       notes: String(row.notes),
       activityCount: Number(row.activity_count),
       revision: Number(row.revision),
+      pinnedTrackedTabId: row.pinned_tracked_tab_id == null ? null : String(row.pinned_tracked_tab_id),
+      pinnedActivity:
+        row.pinned_tracked_tab_id == null
+          ? null
+          : {
+              id: String(row.pinned_tracked_tab_id),
+              name: String(row.pinned_name),
+              emoji: row.pinned_emoji == null ? null : String(row.pinned_emoji),
+              currentUrl: String(row.pinned_url),
+            },
     }));
   });
 
@@ -116,17 +129,37 @@ export const saveCloudGroup = (input: {
   name: string;
   notes?: string;
   revision?: number;
+  pinnedTrackedTabId?: string | null;
 }) =>
   withDatabase(async (client, workspaceId) => {
     const now = Date.now();
     const name = requiredText(input.name, "Group name", 120);
     const notes = input.notes ?? "";
     if (notes.length > 4000) throw new Error("Notes must be at most 4000 characters");
+
+    if (input.pinnedTrackedTabId) {
+      const pinned = await client.execute({
+        sql: "SELECT id FROM tracked_tab WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL",
+        args: [input.pinnedTrackedTabId, workspaceId],
+      });
+      if (!pinned.rows.length) throw new Error("Pinned activity not found");
+    }
+
     if (input.id) {
+      const pinnedValue =
+        input.pinnedTrackedTabId !== undefined ? input.pinnedTrackedTabId : undefined;
       const result = await client.execute({
-        sql: `UPDATE "group" SET name = ?, notes = ?, updated_at = ?, revision = revision + 1
-          WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at IS NULL`,
-        args: [name, notes, now, input.id, workspaceId, input.revision ?? 0],
+        sql:
+          pinnedValue !== undefined
+            ? `UPDATE "group" SET name = ?, notes = ?, pinned_tracked_tab_id = ?,
+                updated_at = ?, revision = revision + 1
+                WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at IS NULL`
+            : `UPDATE "group" SET name = ?, notes = ?, updated_at = ?, revision = revision + 1
+                WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at IS NULL`,
+        args:
+          pinnedValue !== undefined
+            ? [name, notes, pinnedValue, now, input.id, workspaceId, input.revision ?? 0]
+            : [name, notes, now, input.id, workspaceId, input.revision ?? 0],
       });
       if (result.rowsAffected !== 1)
         throw new Error("Group changed on another device; refresh and retry");
@@ -134,9 +167,9 @@ export const saveCloudGroup = (input: {
     }
     const id = createId("grp");
     await client.execute({
-      sql: `INSERT INTO "group" (id, workspace_id, name, notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [id, workspaceId, name, notes, now, now],
+      sql: `INSERT INTO "group" (id, workspace_id, name, notes, pinned_tracked_tab_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [id, workspaceId, name, notes, input.pinnedTrackedTabId ?? null, now, now],
     });
     return id;
   });
@@ -214,12 +247,19 @@ export const removeCloudDevice = (id: string, revision: number) =>
     );
   });
 
-export const getCloudHistory = (tabId: string) =>
+export const getCloudHistory = (
+  tabId: string,
+  retentionDays: 7 | 30 | 90 | null = null,
+) =>
   withDatabase(async (client, workspaceId) => {
+    const cutoff =
+      retentionDays === null ? null : Date.now() - retentionDays * 24 * 60 * 60 * 1000;
     const result = await client.execute({
       sql: `SELECT id, url, title, visited_at FROM tracked_tab_history
-        WHERE workspace_id = ? AND tracked_tab_id = ? ORDER BY visited_at DESC LIMIT 200`,
-      args: [workspaceId, tabId],
+        WHERE workspace_id = ? AND tracked_tab_id = ?
+        ${cutoff === null ? "" : "AND visited_at >= ?"}
+        ORDER BY visited_at DESC LIMIT 200`,
+      args: cutoff === null ? [workspaceId, tabId] : [workspaceId, tabId, cutoff],
     });
     return result.rows.map((row) => ({
       id: String(row.id),
@@ -235,6 +275,17 @@ export const clearCloudHistory = (tabId: string) =>
       sql: "DELETE FROM tracked_tab_history WHERE workspace_id = ? AND tracked_tab_id = ?",
       args: [workspaceId, tabId],
     });
+  });
+
+export const purgeCloudHistoryByRetention = (retentionDays: 7 | 30 | 90 | null) =>
+  withDatabase(async (client, workspaceId) => {
+    if (retentionDays === null) return 0;
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    const result = await client.execute({
+      sql: "DELETE FROM tracked_tab_history WHERE workspace_id = ? AND visited_at < ?",
+      args: [workspaceId, cutoff],
+    });
+    return Number(result.rowsAffected ?? 0);
   });
 
 export const updateCloudSettings = (settings: PrivacySettings) =>

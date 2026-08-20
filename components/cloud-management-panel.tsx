@@ -1,7 +1,16 @@
 import { useEffect, useState, useTransition } from "react";
 
-import { sendMessage } from "../lib/messaging";
-import { M3TextArea, M3TextField } from "../entrypoints/popup/components/m3-text-field";
+import { sendMessage, type PopupSnapshot } from "../lib/messaging";
+import type { TrackedTab } from "../lib/types";
+import { displayHostPath } from "../lib/privacy";
+import { M3Select, M3TextArea, M3TextField } from "../entrypoints/popup/components/m3-text-field";
+
+type PinnedActivity = {
+  id: string;
+  name: string;
+  emoji: string | null;
+  currentUrl: string;
+};
 
 type CloudGroup = {
   id: string;
@@ -9,7 +18,10 @@ type CloudGroup = {
   notes: string;
   activityCount: number;
   revision: number;
+  pinnedTrackedTabId?: string | null;
+  pinnedActivity?: PinnedActivity | null;
 };
+
 type CloudDevice = {
   id: string;
   name: string;
@@ -22,14 +34,19 @@ type CloudDevice = {
 export function CloudManagementPanel({
   kind,
   currentDeviceId,
+  trackedTabs = [],
+  onUpdate,
 }: {
   kind: "groups" | "devices";
   currentDeviceId?: string;
+  trackedTabs?: TrackedTab[];
+  onUpdate?: (snapshot: PopupSnapshot) => void;
 }) {
   const [groups, setGroups] = useState<CloudGroup[]>([]);
   const [devices, setDevices] = useState<CloudDevice[]>([]);
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
+  const [pinnedTrackedTabId, setPinnedTrackedTabId] = useState("");
   const [editing, setEditing] = useState<CloudGroup | CloudDevice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -46,6 +63,18 @@ export function CloudManagementPanel({
 
   useEffect(load, [kind]);
 
+  const resetForm = () => {
+    setEditing(null);
+    setName("");
+    setNotes("");
+    setPinnedTrackedTabId("");
+  };
+
+  const groupActivities =
+    editing && kind === "groups" && "notes" in editing
+      ? trackedTabs.filter((tab) => tab.groupId === editing.id && !tab.archivedAt)
+      : [];
+
   const save = () =>
     startTransition(async () => {
       setError(null);
@@ -57,6 +86,10 @@ export function CloudManagementPanel({
               name: name.trim(),
               notes,
               revision: editing?.revision,
+              pinnedTrackedTabId:
+                editing?.id && pinnedTrackedTabId === ""
+                  ? null
+                  : pinnedTrackedTabId || undefined,
             })
           : editing
             ? await sendMessage({
@@ -70,9 +103,8 @@ export function CloudManagementPanel({
       if (!response.ok) return setError(response.error);
       setGroups((response.groups ?? groups) as CloudGroup[]);
       setDevices((response.devices ?? devices) as CloudDevice[]);
-      setEditing(null);
-      setName("");
-      setNotes("");
+      if (response.snapshot && onUpdate) onUpdate(response.snapshot);
+      resetForm();
     });
 
   const remove = (item: CloudGroup | CloudDevice) =>
@@ -86,6 +118,7 @@ export function CloudManagementPanel({
       if (!response.ok) return setError(response.error);
       setGroups((response.groups ?? groups) as CloudGroup[]);
       setDevices((response.devices ?? devices) as CloudDevice[]);
+      if (response.snapshot && onUpdate) onUpdate(response.snapshot);
     });
 
   const items = kind === "groups" ? groups : devices;
@@ -111,20 +144,33 @@ export function CloudManagementPanel({
             onChange={setNotes}
           />
         ) : null}
+        {kind === "groups" && editing && "notes" in editing ? (
+          <M3Select
+            label="Pinned activity"
+            value={pinnedTrackedTabId}
+            onChange={(event) => setPinnedTrackedTabId(event.target.value)}
+          >
+            <option value="">No pinned activity</option>
+            {groupActivities.map((tab) => (
+              <option key={tab.id} value={tab.id}>
+                {tab.emoji ? `${tab.emoji} ` : ""}
+                {tab.name}
+              </option>
+            ))}
+          </M3Select>
+        ) : null}
+        {kind === "groups" && editing && groupActivities.length === 0 ? (
+          <p className="muted" style={{ margin: 0, fontSize: 11 }}>
+            Assign activities to this group from the activity editor to pin one here.
+          </p>
+        ) : null}
         {kind === "groups" || editing ? (
           <div className="row wrap">
             <button className="btn secondary" disabled={pending || !name.trim()} onClick={save}>
               Save
             </button>
             {editing ? (
-              <button
-                className="btn ghost"
-                onClick={() => {
-                  setEditing(null);
-                  setName("");
-                  setNotes("");
-                }}
-              >
+              <button className="btn ghost" onClick={resetForm}>
                 Cancel
               </button>
             ) : null}
@@ -144,6 +190,12 @@ export function CloudManagementPanel({
                 </span>
               </div>
               {"notes" in item && item.notes ? <p className="cloud-group-card__notes">{item.notes}</p> : null}
+              {"pinnedActivity" in item && item.pinnedActivity ? (
+                <p className="muted cloud-group-card__pinned" style={{ margin: "6px 0 0", fontSize: 11 }}>
+                  Pinned: {item.pinnedActivity.emoji ? `${item.pinnedActivity.emoji} ` : ""}
+                  {item.pinnedActivity.name} · {displayHostPath(item.pinnedActivity.currentUrl)}
+                </p>
+              ) : null}
               {"lastSeenAt" in item ? (
                 <p className="muted">Last seen {new Date(item.lastSeenAt).toLocaleString()}</p>
               ) : null}
@@ -154,10 +206,16 @@ export function CloudManagementPanel({
                   onClick={() => {
                     setEditing(item);
                     setName(item.name);
-                    setNotes("notes" in item ? item.notes : "");
+                    if ("notes" in item) {
+                      setNotes(item.notes);
+                      setPinnedTrackedTabId(item.pinnedTrackedTabId ?? "");
+                    } else {
+                      setNotes("");
+                      setPinnedTrackedTabId("");
+                    }
                   }}
                 >
-                  Rename
+                  {kind === "groups" ? "Edit" : "Rename"}
                 </button>
                 <button
                   className="btn danger"

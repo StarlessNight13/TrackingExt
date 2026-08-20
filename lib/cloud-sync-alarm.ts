@@ -1,4 +1,4 @@
-import type { DatabaseBehavior } from "../services/database-service";
+import type { CloudSyncPolicy } from "../services/database-service";
 
 export const CLOUD_SYNC_ALARM = "trackingext-sync";
 
@@ -9,10 +9,10 @@ type AlarmsApi = {
 
 export async function scheduleCloudSyncAlarm(
   alarms: AlarmsApi,
-  behavior: DatabaseBehavior | undefined,
+  behavior: CloudSyncPolicy | undefined,
 ) {
   await alarms.clear(CLOUD_SYNC_ALARM);
-  if (!behavior?.automaticSync) return;
+  if (!behavior?.scheduledSync) return;
 
-  alarms.create(CLOUD_SYNC_ALARM, { periodInMinutes: behavior.syncIntervalMinutes });
+  alarms.create(CLOUD_SYNC_ALARM, { periodInMinutes: behavior.scheduledSyncIntervalMinutes });
 }

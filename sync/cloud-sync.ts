@@ -6,7 +6,7 @@ import { tabFromRow, takeOverTrackedTab, updateTrackedTabLocation } from "../db/
 import { getCloudCredentials, setCloudStatus } from "../storage/cloud-configuration";
 import { setLocalState } from "../lib/storage";
 import { getLocalState } from "../lib/storage";
-import { withDatabaseClient } from "../services/database-service";
+import { withDatabaseClient, type CloudSyncPolicy } from "../services/database-service";
 import {
   applyPulledTabs,
   compactLocalDatabase,
@@ -18,6 +18,7 @@ import {
   storeConflict,
   type OutboxOperation,
 } from "../storage/indexed-db";
+import type { CloudSyncTrigger } from "./sync-triggers";
 
 async function applyConditionalMutation(
   client: DatabaseClient,
@@ -120,13 +121,15 @@ async function applyConditionalMutation(
     }
   } else if (operation.kind === "rename") {
     mutation = {
-      sql: `UPDATE tracked_tab SET name = ?, emoji = ?, tags = ?, group_id = ?, updated_at = ?, revision = revision + 1
+      sql: `UPDATE tracked_tab SET name = ?, emoji = ?, tags = ?, group_id = ?, is_private = ?,
+        updated_at = ?, revision = revision + 1
         WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at IS NULL`,
       args: [
         String(operation.payload.name),
         operation.payload.emoji == null ? null : String(operation.payload.emoji),
         JSON.stringify(operation.payload.tags ?? []),
         operation.payload.groupId == null ? null : String(operation.payload.groupId),
+        operation.payload.isPrivate ? 1 : 0,
         operation.createdAt,
         operation.entityId,
         workspaceId,
@@ -136,6 +139,43 @@ async function applyConditionalMutation(
     receiptCheck = {
       sql: "SELECT 1 FROM tracked_tab WHERE id = ? AND workspace_id = ? AND revision = ? AND updated_at = ?",
       args: [operation.entityId, workspaceId, (operation.baseRevision ?? 0) + 1, operation.createdAt],
+    };
+  } else if (operation.kind === "archive") {
+    mutation = {
+      sql: `UPDATE tracked_tab SET archived_at = ?, active_device_id = NULL,
+        updated_at = ?, revision = revision + 1
+        WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at IS NULL`,
+      args: [
+        operation.createdAt,
+        operation.createdAt,
+        operation.entityId,
+        workspaceId,
+        operation.baseRevision ?? 0,
+      ],
+    };
+    receiptCheck = {
+      sql: "SELECT 1 FROM tracked_tab WHERE id = ? AND workspace_id = ? AND revision = ? AND archived_at = ?",
+      args: [
+        operation.entityId,
+        workspaceId,
+        (operation.baseRevision ?? 0) + 1,
+        operation.createdAt,
+      ],
+    };
+  } else if (operation.kind === "restore") {
+    mutation = {
+      sql: `UPDATE tracked_tab SET archived_at = NULL, updated_at = ?, revision = revision + 1
+        WHERE id = ? AND workspace_id = ? AND revision = ? AND deleted_at IS NULL`,
+      args: [operation.createdAt, operation.entityId, workspaceId, operation.baseRevision ?? 0],
+    };
+    receiptCheck = {
+      sql: "SELECT 1 FROM tracked_tab WHERE id = ? AND workspace_id = ? AND revision = ? AND archived_at IS NULL AND updated_at = ?",
+      args: [
+        operation.entityId,
+        workspaceId,
+        (operation.baseRevision ?? 0) + 1,
+        operation.createdAt,
+      ],
     };
   } else {
     mutation = {
@@ -255,16 +295,19 @@ async function pull(client: DatabaseClient, workspaceId: string) {
 
 let syncing: Promise<{ pushed: number; pulled: number }> | undefined;
 
-export function syncCloudDatabase(options: { manual?: boolean } = {}) {
+export function shouldRunCloudSync(trigger: CloudSyncTrigger, policy: CloudSyncPolicy) {
+  if (trigger === "manual") return true;
+  if (trigger === "activity") return policy.activitySync;
+  return policy.scheduledSync;
+}
+
+export function syncCloudDatabase(options: { trigger?: CloudSyncTrigger } = {}) {
   if (!syncing) {
     syncing = (async () => {
       const credentials = await getCloudCredentials();
       const state = await getLocalState();
-      if (
-        !credentials ||
-        !state.syncModes.online ||
-        (!options.manual && !credentials.behavior.automaticSync)
-      )
+      const trigger = options.trigger ?? "scheduled";
+      if (!credentials || !state.syncModes.online || !shouldRunCloudSync(trigger, credentials.behavior))
         return { pushed: 0, pulled: 0 };
       await setCloudStatus({ state: "syncing", lastSyncAt: null, lastError: null });
       try {

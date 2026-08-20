@@ -172,12 +172,73 @@ export async function updateOfflineTabTether(input: {
   return updated;
 }
 
+export async function archiveOfflineTab(tabId: string): Promise<TrackedTab | null> {
+  const state = await getLocalState();
+  const tab = state.cachedTabs.find((t) => t.id === tabId);
+  if (!tab) return null;
+
+  const updated: TrackedTab = {
+    ...tab,
+    archivedAt: nowIso(),
+    activeDeviceId: null,
+    activeDevice: null,
+    lastUpdatedAt: nowIso(),
+  };
+
+  await setLocalState({
+    cachedTabs: state.cachedTabs.map((t) => (t.id === tabId ? updated : t)),
+  });
+  return updated;
+}
+
+export async function restoreOfflineTab(tabId: string): Promise<TrackedTab | null> {
+  const state = await getLocalState();
+  const tab = state.cachedTabs.find((t) => t.id === tabId);
+  if (!tab) return null;
+
+  const updated: TrackedTab = {
+    ...tab,
+    archivedAt: null,
+    lastUpdatedAt: nowIso(),
+  };
+
+  await setLocalState({
+    cachedTabs: state.cachedTabs.map((t) => (t.id === tabId ? updated : t)),
+  });
+  return updated;
+}
+
+export async function applyOfflineTabTags(
+  tabId: string,
+  tags: string[],
+  mode: "add" | "replace",
+): Promise<TrackedTab | null> {
+  const state = await getLocalState();
+  const tab = state.cachedTabs.find((t) => t.id === tabId);
+  if (!tab) return null;
+
+  const nextTags =
+    mode === "replace" ? tags : [...new Set([...tab.tags, ...tags])];
+  return renameOfflineTab(tabId, tab.name, tab.emoji, nextTags, tab.groupId, tab.isPrivate);
+}
+
+export async function moveOfflineTabToGroup(
+  tabId: string,
+  groupId: string | null,
+): Promise<TrackedTab | null> {
+  const state = await getLocalState();
+  const tab = state.cachedTabs.find((t) => t.id === tabId);
+  if (!tab) return null;
+  return renameOfflineTab(tabId, tab.name, tab.emoji, tab.tags, groupId, tab.isPrivate);
+}
+
 export async function renameOfflineTab(
   tabId: string,
   name: string,
   emoji?: string | null,
   tags?: string[],
   groupId?: string | null,
+  isPrivate?: boolean,
 ): Promise<TrackedTab | null> {
   const state = await getLocalState();
   const tab = state.cachedTabs.find((t) => t.id === tabId);
@@ -189,6 +250,7 @@ export async function renameOfflineTab(
     ...(emoji !== undefined ? { emoji } : {}),
     ...(tags !== undefined ? { tags } : {}),
     ...(groupId !== undefined ? { groupId, group: null } : {}),
+    ...(isPrivate !== undefined ? { isPrivate } : {}),
     lastUpdatedAt: nowIso(),
   };
 

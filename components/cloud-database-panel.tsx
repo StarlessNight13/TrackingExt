@@ -5,7 +5,7 @@ import { sendMessage, type PopupSnapshot } from "../lib/messaging";
 import { M3Button } from "../entrypoints/popup/components/m3-button";
 import { M3SwitchRow } from "../entrypoints/popup/components/m3-switch";
 import { M3Select, M3TextField } from "../entrypoints/popup/components/m3-text-field";
-import { DEFAULT_DATABASE_BEHAVIOR, type DatabaseBehavior } from "../services/database-service";
+import { DEFAULT_CLOUD_SYNC_POLICY, type CloudSyncPolicy } from "../services/database-service";
 import type { DatabaseProvider } from "../services/database-service";
 import type { DatabaseLog } from "../storage/indexed-db";
 
@@ -38,8 +38,8 @@ export function CloudDatabasePanel({
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<unknown[] | null>(null);
   const [logs, setLogs] = useState<DatabaseLog[]>([]);
-  const [behavior, setBehavior] = useState<DatabaseBehavior>(
-    snapshot.cloud.configuration?.behavior ?? DEFAULT_DATABASE_BEHAVIOR,
+  const [behavior, setBehavior] = useState<CloudSyncPolicy>(
+    snapshot.cloud.configuration?.behavior ?? DEFAULT_CLOUD_SYNC_POLICY,
   );
   const [pending, startTransition] = useTransition();
   const importInput = useRef<HTMLInputElement>(null);
@@ -53,6 +53,10 @@ export function CloudDatabasePanel({
   useEffect(() => {
     void loadLogs();
   }, [snapshot.cloud.status.lastSyncAt, snapshot.cloud.pending]);
+
+  useEffect(() => {
+    setBehavior(snapshot.cloud.configuration?.behavior ?? DEFAULT_CLOUD_SYNC_POLICY);
+  }, [snapshot.cloud.configuration?.behavior]);
 
   const run = (action: () => Promise<void>) => {
     setError(null);
@@ -238,22 +242,29 @@ export function CloudDatabasePanel({
       {configuration ? (
         <>
           <M3SwitchRow
-            id="database-automatic-sync"
-            title="Automatic sync"
-            description="Sync on browser events and a background schedule"
-            checked={behavior.automaticSync}
-            onChange={(automaticSync) => setBehavior((current) => ({ ...current, automaticSync }))}
+            id="database-activity-sync"
+            title="Activity sync"
+            description="Upload new tethers, renames, archive changes, and other explicit edits right away."
+            checked={behavior.activitySync}
+            onChange={(activitySync) => setBehavior((current) => ({ ...current, activitySync }))}
+          />
+          <M3SwitchRow
+            id="database-scheduled-sync"
+            title="Time sync"
+            description="Periodically upload navigation updates and download changes from other devices."
+            checked={behavior.scheduledSync}
+            onChange={(scheduledSync) => setBehavior((current) => ({ ...current, scheduledSync }))}
           />
           <M3Select
-            label="Background sync interval"
-            value={String(behavior.syncIntervalMinutes)}
-            disabled={!behavior.automaticSync}
+            label="Time sync interval"
+            value={String(behavior.scheduledSyncIntervalMinutes)}
+            disabled={!behavior.scheduledSync}
             onChange={(event) =>
               setBehavior((current) => ({
                 ...current,
-                syncIntervalMinutes: Number(
+                scheduledSyncIntervalMinutes: Number(
                   event.target.value,
-                ) as DatabaseBehavior["syncIntervalMinutes"],
+                ) as CloudSyncPolicy["scheduledSyncIntervalMinutes"],
               }))
             }
           >
@@ -274,7 +285,7 @@ export function CloudDatabasePanel({
               })
             }
           >
-            Save database behavior
+            Save sync policy
           </M3Button>
           <p className="muted" style={{ margin: 0, fontSize: 11 }}>
             Last sync:{" "}

@@ -4,15 +4,53 @@ import type { DatabaseClient, Statement } from "../db/client";
 import { appendDatabaseLog } from "../storage/indexed-db";
 
 export type DatabaseProvider = "libsql" | "d1";
-export type DatabaseBehavior = {
-  automaticSync: boolean;
-  syncIntervalMinutes: 2 | 5 | 15 | 30;
+export type CloudSyncPolicy = {
+  activitySync: boolean;
+  scheduledSync: boolean;
+  scheduledSyncIntervalMinutes: 2 | 5 | 15 | 30;
 };
 
-export const DEFAULT_DATABASE_BEHAVIOR: DatabaseBehavior = {
-  automaticSync: true,
-  syncIntervalMinutes: 2,
+type LegacyDatabaseBehavior = {
+  automaticSync?: boolean;
+  syncIntervalMinutes?: 2 | 5 | 15 | 30;
 };
+
+export const DEFAULT_CLOUD_SYNC_POLICY: CloudSyncPolicy = {
+  activitySync: true,
+  scheduledSync: true,
+  scheduledSyncIntervalMinutes: 2,
+};
+
+export function migrateCloudSyncPolicy(
+  value: CloudSyncPolicy | LegacyDatabaseBehavior | undefined | null,
+): CloudSyncPolicy {
+  if (
+    value &&
+    "activitySync" in value &&
+    "scheduledSync" in value &&
+    "scheduledSyncIntervalMinutes" in value
+  ) {
+    return value;
+  }
+
+  if (value && "automaticSync" in value) {
+    const interval = value.syncIntervalMinutes ?? DEFAULT_CLOUD_SYNC_POLICY.scheduledSyncIntervalMinutes;
+    if (value.automaticSync === false) {
+      return {
+        activitySync: false,
+        scheduledSync: false,
+        scheduledSyncIntervalMinutes: interval,
+      };
+    }
+    return {
+      activitySync: true,
+      scheduledSync: true,
+      scheduledSyncIntervalMinutes: interval,
+    };
+  }
+
+  return DEFAULT_CLOUD_SYNC_POLICY;
+}
 
 export type DatabaseCredentials = {
   provider: DatabaseProvider;

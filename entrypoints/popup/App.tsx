@@ -2,8 +2,10 @@ import { useEffect, useState, useTransition } from "react";
 
 import { displayHostPath } from "@/lib/privacy";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
+import { ExportActivityButtons } from "@/components/export-activity-buttons";
 import { HistoryView } from "@/components/history-view";
 import { ActivityMetadataEditor } from "@/components/activity-metadata-editor";
+import { ActivityHealthBadges } from "@/components/activity-health-badges";
 import { ResumePicker } from "@/components/resume-picker";
 import { SeriesTetherPanel } from "@/components/series-tether-panel";
 import { openDashboard } from "@/lib/open-dashboard";
@@ -13,11 +15,13 @@ import { seriesLearningProgress } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import { supportedSyncModes, supportsLanSync } from "@/lib/browser-capabilities";
 import { formatDevice, relativeTime } from "@/lib/view-utils";
+import { activityHealthRecoveryHint, hasActivityHealthIssues } from "@/lib/activity-health";
 
 import { ExtensionThemeProvider } from "./components/extension-theme-provider";
 import { CollapsibleSection } from "./components/collapsible-section";
 import { IconSettings } from "./components/icons";
 import { LanPairingPanel } from "./components/lan-pairing-panel";
+import { HistoryRetentionPicker } from "@/components/history-retention-picker";
 import { M3SwitchRow } from "./components/m3-switch";
 import { M3TextArea, M3TextField } from "./components/m3-text-field";
 
@@ -265,6 +269,11 @@ function SettingsView({
             onChange={(checked) => patchSettings({ stripFragments: !checked })}
             id="settings-store-fragments"
           />
+          <HistoryRetentionPicker
+            value={snapshot.settings.historyRetentionDays}
+            disabled={pending}
+            onChange={(historyRetentionDays) => patchSettings({ historyRetentionDays })}
+          />
         </div>
       </CollapsibleSection>
 
@@ -325,6 +334,9 @@ function MainView({
   const boundCount = tracked ? (snapshot.boundTabCounts[tracked.id] ?? 0) : 0;
   const tetheredOpenTabs = snapshot.openTabs.filter((tab) => tab.tracked);
   const untetheredOpenTabs = snapshot.openTabs.filter((tab) => !tab.tracked);
+  const unhealthyCount = snapshot.trackedTabs.filter(
+    (tab) => tab.health && hasActivityHealthIssues(tab.health),
+  ).length;
 
   useEffect(() => {
     setName(tracked?.name ?? current?.title ?? "");
@@ -480,8 +492,13 @@ function MainView({
               <span className="status-dot" />
               Tethered
               {tracked.tetherMode === "series" ? <span className="pill">Series</span> : null}
-              {!current.isActiveOwner ? <span className="pill">owned elsewhere</span> : null}
+              {tracked.isPrivate ? <span className="pill">Private</span> : null}
+              {!current.isActiveOwner ? <span className="pill pill--warning">owned elsewhere</span> : null}
             </div>
+            <ActivityHealthBadges health={tracked.health} />
+            {tracked.health && activityHealthRecoveryHint(tracked.health) ? (
+              <p className="activity-health-hint">{activityHealthRecoveryHint(tracked.health)}</p>
+            ) : null}
             {boundCount > 1 ? (
               <p className="muted" style={{ margin: 0, fontSize: 11 }}>
                 {boundCount} browser tabs are linked to this activity.
@@ -549,6 +566,42 @@ function MainView({
               >
                 History
               </button>
+              <ExportActivityButtons tracked={tracked} disabled={pending} className="btn secondary" />
+              {!tracked.archivedAt ? (
+                <button
+                  className="btn secondary"
+                  disabled={pending}
+                  onClick={() =>
+                    run(async () => {
+                      const res = await sendMessage({
+                        type: "ARCHIVE_TAB",
+                        trackedTabId: tracked.id,
+                      });
+                      if (!res.ok) throw new Error(res.error);
+                      if (res.snapshot) onUpdate(res.snapshot);
+                    })
+                  }
+                >
+                  Archive
+                </button>
+              ) : (
+                <button
+                  className="btn secondary"
+                  disabled={pending}
+                  onClick={() =>
+                    run(async () => {
+                      const res = await sendMessage({
+                        type: "RESTORE_TAB",
+                        trackedTabId: tracked.id,
+                      });
+                      if (!res.ok) throw new Error(res.error);
+                      if (res.snapshot) onUpdate(res.snapshot);
+                    })
+                  }
+                >
+                  Restore
+                </button>
+              )}
               <button
                 className="btn secondary"
                 disabled={pending}
@@ -763,7 +816,7 @@ function MainView({
         id="all-activities"
         title="All activities"
         defaultOpen={snapshot.trackedTabs.length <= 4}
-        badge={`${snapshot.trackedTabs.length}`}
+        badge={`${snapshot.trackedTabs.length}${unhealthyCount > 0 ? ` · ${unhealthyCount} need attention` : ""}`}
         actions={
           snapshot.trackedTabs.length > 0 ? (
             <button className="btn secondary" type="button" onClick={onOpenResume}>
@@ -800,6 +853,7 @@ function MainView({
                   {tab.name}
                   {tracked?.id === tab.id ? " (current page)" : ""}
                 </span>
+                <ActivityHealthBadges health={tab.health} />
                 <span className="sub">{tab.currentTitle || displayHostPath(tab.currentUrl)}</span>
                 <span className="sub">
                   {(snapshot.boundTabCounts[tab.id] ?? 0) > 0

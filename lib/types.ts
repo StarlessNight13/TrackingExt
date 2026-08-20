@@ -71,7 +71,8 @@ export type TrackedTab = {
     stale: boolean;
     ownerOffline: boolean;
     ownershipConflict: boolean;
-    issues: Array<"stale" | "owner_offline" | "ownership_conflict">;
+    syncPending: boolean;
+    issues: Array<"stale" | "owner_offline" | "ownership_conflict" | "sync_pending">;
   };
 };
 

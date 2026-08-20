@@ -10,7 +10,7 @@ import type { TetherMode } from "./tether-series";
 import type { CloudDatabaseSpikeResult } from "./cloud-db/spike";
 import type { CloudConfiguration, CloudStatus } from "../storage/cloud-configuration";
 import type { TrackingExtExport } from "../storage/export";
-import type { DatabaseBehavior } from "../services/database-service";
+import type { CloudSyncPolicy } from "../services/database-service";
 import type { DatabaseProvider } from "../services/database-service";
 
 export type OpenWindowTab = {
@@ -67,6 +67,7 @@ export type ExtensionRequest =
       emoji?: string | null;
       tags?: string[];
       groupId?: string | null;
+      isPrivate?: boolean;
     }
   | {
       type: "UPDATE_SERIES_TETHER";
@@ -103,6 +104,35 @@ export type ExtensionRequest =
       deviceName: string;
     }
   | { type: "DISCONNECT_CLOUD_DATABASE" }
+  | { type: "ARCHIVE_TAB"; trackedTabId: string }
+  | { type: "RESTORE_TAB"; trackedTabId: string }
+  | {
+      type: "BULK_ARCHIVE_TABS";
+      trackedTabIds: string[];
+    }
+  | {
+      type: "BULK_DELETE_TABS";
+      trackedTabIds: string[];
+    }
+  | {
+      type: "BULK_TAG_TABS";
+      trackedTabIds: string[];
+      tags: string[];
+      mode: "add" | "replace";
+    }
+  | {
+      type: "BULK_MOVE_TABS";
+      trackedTabIds: string[];
+      groupId: string | null;
+    }
+  | {
+      type: "BULK_RESTORE_TABS";
+      trackedTabIds: string[];
+    }
+  | {
+      type: "BULK_CLEAR_HISTORY";
+      trackedTabIds: string[];
+    }
   | { type: "EXPORT_DATA" }
   | { type: "IMPORT_DATA"; data: unknown }
   | { type: "EXPORT_CLOUD_DATABASE" }
@@ -110,9 +140,9 @@ export type ExtensionRequest =
   | { type: "GET_CONFLICTS" }
   | { type: "GET_DATABASE_LOGS" }
   | { type: "CLEAR_DATABASE_LOGS" }
-  | { type: "UPDATE_DATABASE_BEHAVIOR"; behavior: DatabaseBehavior }
+  | { type: "UPDATE_DATABASE_BEHAVIOR"; behavior: CloudSyncPolicy }
   | { type: "LIST_CLOUD_GROUPS" }
-  | { type: "SAVE_CLOUD_GROUP"; id?: string; name: string; notes?: string; revision?: number }
+  | { type: "SAVE_CLOUD_GROUP"; id?: string; name: string; notes?: string; revision?: number; pinnedTrackedTabId?: string | null }
   | { type: "DELETE_CLOUD_GROUP"; id: string; revision: number }
   | { type: "LIST_CLOUD_DEVICES" }
   | { type: "RENAME_CLOUD_DEVICE"; id: string; name: string; revision: number }

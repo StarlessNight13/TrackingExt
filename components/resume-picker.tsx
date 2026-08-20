@@ -4,6 +4,7 @@ import { displayHostPath } from "@/lib/privacy";
 import { sendMessage, type PopupSnapshot } from "@/lib/messaging";
 import type { TrackedTab } from "@/lib/types";
 import { formatDevice, relativeTime } from "@/lib/view-utils";
+import { ActivityHealthBadges } from "@/components/activity-health-badges";
 import { M3TextField } from "../entrypoints/popup/components/m3-text-field";
 
 export function ResumePicker({
@@ -126,6 +127,7 @@ export function ResumePicker({
                       </span>
                     ) : null}
                   </span>
+                  <ActivityHealthBadges health={tab.health} />
                   <span className="sub">{tab.currentTitle || displayHostPath(tab.currentUrl)}</span>
                   <span className="sub">
                     {formatDevice(tab)} · {relativeTime(tab.lastUpdatedAt)}

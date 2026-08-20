@@ -8,6 +8,16 @@ import { isOffscreenLanMessage } from "../lib/lan-sync/offscreen-protocol";
 import { handleStorageBridgeMessage } from "../lib/storage-bridge-handler";
 import { isStorageBridgeMessage } from "../lib/storage-bridge";
 import { ensureLocalDeviceId, getEffectiveDeviceId } from "../lib/local-device";
+import { computeActivityHealth } from "../lib/activity-health";
+import {
+  archiveTrackedTabs,
+  clearTrackedTabsHistory,
+  deleteTrackedTabs,
+  moveTrackedTabs,
+  restoreTrackedTabs,
+  tagTrackedTabs,
+} from "../lib/bulk-actions";
+import { filterHistoryByRetention, purgeLocalHistoryByRetention } from "../lib/history-retention";
 import type { ExtensionRequest, ExtensionResponse, PopupSnapshot } from "../lib/messaging";
 import { isTrackableUrl } from "../lib/privacy";
 import { clearOfflineHistory, getOfflineHistory } from "../lib/sync/offline-store";
@@ -35,7 +45,7 @@ import {
 } from "../lib/tracking";
 import { runCloudDatabaseSpike } from "../lib/cloud-db/spike";
 import { CLOUD_SYNC_ALARM, scheduleCloudSyncAlarm } from "../lib/cloud-sync-alarm";
-import { syncCloudDatabase } from "../sync/cloud-sync";
+import { requestCloudSync } from "../sync/coordinator";
 import { cloudTabView } from "../sync/cloud-tabs";
 import { withLocalTether } from "../lib/tether-overlay";
 import { findSyncedTab } from "../lib/sync/router";
@@ -63,6 +73,7 @@ import {
   removeCloudDevice,
   renameCloudDevice,
   saveCloudGroup,
+  purgeCloudHistoryByRetention,
   updateCloudSettings,
   exportCloudDatabase,
   importCloudDatabase,
@@ -70,7 +81,7 @@ import {
 import { getCloudCredentials } from "../storage/cloud-configuration";
 
 async function runFullSync() {
-  await syncCloudDatabase({ manual: true });
+  await requestCloudSync("manual");
 }
 
 async function scheduleConfiguredCloudSync() {
@@ -155,7 +166,12 @@ async function buildSnapshot(): Promise<PopupSnapshot> {
     currentTab,
     openTabs,
     boundTabCounts,
-    trackedTabs: displayedTabs,
+    trackedTabs: displayedTabs.map((tab) => ({
+      ...tab,
+      health: computeActivityHealth(tab, {
+        syncPending: Boolean(state.queuedLocationUpdates[tab.id]),
+      }),
+    })),
     pendingReconnect: state.pendingReconnect,
     pendingSyncCount: Object.keys(state.queuedLocationUpdates).length,
     settings: state.settings,
@@ -170,10 +186,17 @@ async function updateSettingsPartial(settings: Partial<PrivacySettings>) {
   if (await getCloudCredentials()) {
     await updateCloudSettings(merged);
     await setLocalState({ settings: merged });
+    if (settings.historyRetentionDays !== undefined) {
+      await purgeCloudHistoryByRetention(merged.historyRetentionDays);
+    }
+    await requestCloudSync("activity");
     return merged;
   }
 
   await setLocalState({ settings: merged });
+  if (settings.historyRetentionDays !== undefined) {
+    await purgeLocalHistoryByRetention(merged.historyRetentionDays);
+  }
   return merged;
 }
 
@@ -234,7 +257,48 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
           message.emoji,
           message.tags,
           message.groupId,
+          message.isPrivate,
         );
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "ARCHIVE_TAB": {
+        await archiveTrackedTabs([message.trackedTabId]);
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "RESTORE_TAB": {
+        await restoreTrackedTabs([message.trackedTabId]);
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "BULK_ARCHIVE_TABS": {
+        await archiveTrackedTabs(message.trackedTabIds);
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "BULK_RESTORE_TABS": {
+        await restoreTrackedTabs(message.trackedTabIds);
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "BULK_DELETE_TABS": {
+        await deleteTrackedTabs(message.trackedTabIds);
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "BULK_TAG_TABS": {
+        await tagTrackedTabs(message.trackedTabIds, message.tags, message.mode);
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "BULK_MOVE_TABS": {
+        await moveTrackedTabs(message.trackedTabIds, message.groupId);
+        return { ok: true, snapshot: await buildSnapshot() };
+      }
+
+      case "BULK_CLEAR_HISTORY": {
+        await clearTrackedTabsHistory(message.trackedTabIds);
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
@@ -355,11 +419,18 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
       }
 
       case "GET_HISTORY": {
+        const state = await getLocalState();
         if (await getCloudCredentials()) {
-          const history = await getCloudHistory(message.trackedTabId);
+          const history = filterHistoryByRetention(
+            await getCloudHistory(message.trackedTabId, state.settings.historyRetentionDays),
+            state.settings.historyRetentionDays,
+          );
           return { ok: true, history, snapshot: await buildSnapshot() };
         }
-        const history = await getOfflineHistory(message.trackedTabId);
+        const history = filterHistoryByRetention(
+          await getOfflineHistory(message.trackedTabId),
+          state.settings.historyRetentionDays,
+        );
         return { ok: true, history, snapshot: await buildSnapshot() };
       }
 
@@ -385,7 +456,7 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
         });
         await scheduleCloudSyncAlarm(browser.alarms, configuration.behavior);
         await updateCloudSettings(state.settings);
-        await syncCloudDatabase();
+        await requestCloudSync("activity");
         return { ok: true, snapshot: await buildSnapshot() };
       }
 
@@ -411,7 +482,7 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 
       case "IMPORT_CLOUD_DATABASE":
         await importCloudDatabase(message.data);
-        await syncCloudDatabase({ manual: true });
+        await requestCloudSync("manual");
         return { ok: true, snapshot: await buildSnapshot() };
 
       case "GET_CONFLICTS": {
@@ -435,10 +506,12 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 
       case "SAVE_CLOUD_GROUP":
         await saveCloudGroup(message);
+        await requestCloudSync("activity");
         return { ok: true, groups: await listCloudGroups(), snapshot: await buildSnapshot() };
 
       case "DELETE_CLOUD_GROUP":
         await deleteCloudGroup(message.id, message.revision);
+        await requestCloudSync("activity");
         return { ok: true, groups: await listCloudGroups(), snapshot: await buildSnapshot() };
 
       case "LIST_CLOUD_DEVICES":
@@ -446,10 +519,12 @@ async function handleMessage(message: ExtensionRequest): Promise<ExtensionRespon
 
       case "RENAME_CLOUD_DEVICE":
         await renameCloudDevice(message.id, message.name, message.revision);
+        await requestCloudSync("activity");
         return { ok: true, devices: await listCloudDevices(), snapshot: await buildSnapshot() };
 
       case "REMOVE_CLOUD_DEVICE":
         await removeCloudDevice(message.id, message.revision);
+        await requestCloudSync("activity");
         return { ok: true, devices: await listCloudDevices(), snapshot: await buildSnapshot() };
 
       default: {
@@ -572,7 +647,7 @@ export default defineBackground(() => {
   if (!import.meta.env.BROWSER || import.meta.env.BROWSER !== "firefox-android") {
     void ensureContextMenus();
   }
-  void syncCloudDatabase();
+  void requestCloudSync("scheduled");
 
   if (import.meta.env.BROWSER !== "firefox-android") {
     browser.commands.onCommand.addListener((command) => {
@@ -617,7 +692,7 @@ export default defineBackground(() => {
       void ensureContextMenus();
     }
     void reconcileRestoredTabs();
-    void syncCloudDatabase();
+    void requestCloudSync("scheduled");
     void scheduleConfiguredCloudSync();
   });
 
@@ -626,12 +701,12 @@ export default defineBackground(() => {
     if (alarm.name !== CLOUD_SYNC_ALARM) return;
     void (async () => {
       try {
-        await syncCloudDatabase();
+        await requestCloudSync("scheduled");
       } catch {
         // Durable outbox retries on the next trigger.
       }
     })();
   });
 
-  globalThis.addEventListener("online", () => void syncCloudDatabase());
+  globalThis.addEventListener("online", () => void requestCloudSync("scheduled"));
 });
