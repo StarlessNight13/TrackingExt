@@ -25,6 +25,7 @@ const KEYS = [
   "settings",
   "pendingReconnect",
   "queuedLocationUpdates",
+  "restoreFingerprints",
 ] as const satisfies readonly (keyof LocalState)[];
 
 function parseSyncModes(raw: unknown): SyncModes {
@@ -62,6 +63,10 @@ function migrateLegacyState(stored: Record<string, unknown>): Partial<LocalState
 
   if (stored.queuedLocationUpdates === undefined) {
     patch.queuedLocationUpdates = {};
+  }
+
+  if (stored.restoreFingerprints === undefined) {
+    patch.restoreFingerprints = {};
   }
 
   if (stored.lanSignalingMode === undefined) {
@@ -131,7 +136,48 @@ export async function getLocalState(): Promise<LocalState> {
       stored.queuedLocationUpdates && typeof stored.queuedLocationUpdates === "object"
         ? (stored.queuedLocationUpdates as LocalState["queuedLocationUpdates"])
         : (migration.queuedLocationUpdates ?? {}),
+    restoreFingerprints: parseRestoreFingerprints(
+      stored.restoreFingerprints ?? migration.restoreFingerprints,
+    ),
   };
+}
+
+function parseRestoreFingerprints(raw: unknown): LocalState["restoreFingerprints"] {
+  if (!raw || typeof raw !== "object") return {};
+  const out: LocalState["restoreFingerprints"] = {};
+  for (const [activityId, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== "object") continue;
+    const fp = value as Record<string, unknown>;
+    if (typeof fp.urlKey !== "string" || fp.urlKey.length === 0) continue;
+    if (typeof fp.pinned !== "boolean") continue;
+    if (typeof fp.index !== "number" || !Number.isFinite(fp.index)) continue;
+    if (typeof fp.windowOrdinal !== "number" || !Number.isFinite(fp.windowOrdinal)) continue;
+    if (typeof fp.windowTabCount !== "number" || !Number.isFinite(fp.windowTabCount)) continue;
+    if (typeof fp.incognito !== "boolean") continue;
+    if (typeof fp.capturedAt !== "string") continue;
+    out[activityId] = {
+      urlKey: fp.urlKey,
+      title: typeof fp.title === "string" ? fp.title : null,
+      pinned: fp.pinned,
+      index: fp.index,
+      windowOrdinal: fp.windowOrdinal,
+      windowTabCount: fp.windowTabCount,
+      openerActivityId: typeof fp.openerActivityId === "string" ? fp.openerActivityId : null,
+      lastAccessed:
+        typeof fp.lastAccessed === "number" && Number.isFinite(fp.lastAccessed)
+          ? fp.lastAccessed
+          : null,
+      groupId:
+        typeof fp.groupId === "number" && Number.isFinite(fp.groupId) ? fp.groupId : null,
+      incognito: fp.incognito,
+      capturedAt: fp.capturedAt,
+      browserTabId:
+        typeof fp.browserTabId === "number" && Number.isInteger(fp.browserTabId)
+          ? fp.browserTabId
+          : null,
+    };
+  }
+  return out;
 }
 
 export async function setLocalState(patch: Partial<LocalState>): Promise<LocalState> {

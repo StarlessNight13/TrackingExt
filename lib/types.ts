@@ -98,6 +98,26 @@ export type ReconnectCandidate = {
   browserTabId: number;
 };
 
+/**
+ * Local-only snapshot of browser-tab layout used to rebind after Chromium
+ * (and Firefox-without-session-value) restarts. Never synced to cloud/LAN.
+ */
+export type RestoreFingerprint = {
+  urlKey: string;
+  title: string | null;
+  pinned: boolean;
+  index: number;
+  windowOrdinal: number;
+  windowTabCount: number;
+  openerActivityId: string | null;
+  lastAccessed: number | null;
+  groupId: number | null;
+  incognito: boolean;
+  capturedAt: string;
+  /** Last known browser tab id; debug only — never match on this after restart. */
+  browserTabId: number | null;
+};
+
 export type LocalState = {
   deviceId: string | null;
   deviceName: string | null;
@@ -115,6 +135,8 @@ export type LocalState = {
   pendingReconnect: ReconnectCandidate[];
   /** Latest unsent location update for compatibility with older local profiles. */
   queuedLocationUpdates: Record<string, QueuedLocationUpdate>;
+  /** activityId -> local restore fingerprint (device-local only). */
+  restoreFingerprints: Record<string, RestoreFingerprint>;
 };
 
 export const DEFAULT_SETTINGS: PrivacySettings = {
@@ -141,4 +163,5 @@ export const DEFAULT_LOCAL_STATE: LocalState = {
   settings: DEFAULT_SETTINGS,
   pendingReconnect: [],
   queuedLocationUpdates: {},
+  restoreFingerprints: {},
 };

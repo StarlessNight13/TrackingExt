@@ -3,6 +3,7 @@ import type { SeriesTetherPattern, TetherMode } from "../tether-series";
 import { getEffectiveDeviceId, getEffectiveDeviceName } from "../local-device";
 import { getLocalState, setLocalState } from "../storage";
 import { withLocalTether } from "../tether-overlay";
+import { clearTabActivityId } from "../tab-session-binding";
 import {
   createOfflineTab,
   deleteOfflineTab,
@@ -52,10 +53,16 @@ export async function syncDeleteTabFromPeer(tabId: string) {
   const state = await getLocalState();
 
   const bindings = { ...state.bindings };
+  const clearedBrowserTabIds: number[] = [];
   for (const [browserTabId, trackedTabId] of Object.entries(bindings)) {
-    if (trackedTabId === tabId) delete bindings[browserTabId];
+    if (trackedTabId === tabId) {
+      delete bindings[browserTabId];
+      const numericId = Number(browserTabId);
+      if (Number.isInteger(numericId)) clearedBrowserTabIds.push(numericId);
+    }
   }
 
+  await Promise.all(clearedBrowserTabIds.map((id) => clearTabActivityId(id)));
   await deleteOfflineTab(tabId);
 
   const localHistory = { ...state.localHistory };

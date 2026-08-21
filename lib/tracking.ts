@@ -26,10 +26,18 @@ import { getLocalState, setLocalState } from "./storage";
 import { stripTrackedTabBadge } from "./title-badge";
 import type { ReconnectCandidate, TrackedTab } from "./types";
 import {
+  claimSessionRestoredBindings,
   matchRestoredBindings,
   reconnectCandidateMatchesTab,
   tabRestoreUrl,
+  type RestorableBrowserTab,
 } from "./restore-bindings";
+import { buildRestoreFingerprint } from "./restore-fingerprint";
+import {
+  clearTabActivityId,
+  readTabActivityId,
+  writeTabActivityId,
+} from "./tab-session-binding";
 
 type TitleBadgeMessage =
   | { type: "SET_TRACKED_TITLE_BADGE"; emoji?: string | null }
@@ -62,6 +70,45 @@ function getBoundTabIds(bindings: Record<string, string>, trackedTabId: string) 
     .filter((tabId) => Number.isInteger(tabId));
 }
 
+async function captureRestoreFingerprint(
+  tabId: number,
+  trackedTabId: string,
+  overrides?: { url?: string; title?: string | null; emoji?: string | null },
+) {
+  try {
+    const [tab, allTabs, state, tracked] = await Promise.all([
+      browser.tabs.get(tabId),
+      browser.tabs.query({}),
+      getLocalState(),
+      findSyncedTab(trackedTabId),
+    ]);
+    const fingerprint = buildRestoreFingerprint({
+      tab,
+      allTabs,
+      settings: state.settings,
+      bindings: { ...state.bindings, [bindingKey(tabId)]: trackedTabId },
+      emoji: overrides?.emoji ?? tracked?.emoji,
+      urlOverride: overrides?.url,
+      titleOverride: overrides?.title,
+    });
+    if (!fingerprint) return;
+    await setLocalState({
+      restoreFingerprints: {
+        ...state.restoreFingerprints,
+        [trackedTabId]: fingerprint,
+      },
+    });
+  } catch (error) {
+    console.warn("Failed to capture restore fingerprint", error);
+  }
+}
+
+export async function refreshRestoreFingerprintForTab(tabId: number) {
+  const trackedTabId = await getBindingForTab(tabId);
+  if (!trackedTabId) return;
+  await captureRestoreFingerprint(tabId, trackedTabId);
+}
+
 export async function canUseTrackingFeatures() {
   const state = await getLocalState();
   if (state.syncModes.offline || state.syncModes.lan) return true;
@@ -87,6 +134,8 @@ export async function setBinding(tabId: number, trackedTabId: string) {
   await setLocalState({
     bindings: { ...state.bindings, [bindingKey(tabId)]: trackedTabId },
   });
+  await writeTabActivityId(tabId, trackedTabId);
+  await captureRestoreFingerprint(tabId, trackedTabId);
 }
 
 export async function clearBinding(tabId: number) {
@@ -96,13 +145,23 @@ export async function clearBinding(tabId: number) {
   await setLocalState({ bindings: next });
 }
 
+/** Clears local binding and Firefox session metadata (manual unbind / destroy). */
+export async function clearBindingWithSession(tabId: number) {
+  await clearTabActivityId(tabId);
+  await clearBinding(tabId);
+}
+
 export async function clearBindingsForTrackedTab(trackedTabId: string) {
   const state = await getLocalState();
+  const boundTabIds = getBoundTabIds(state.bindings, trackedTabId);
+  await Promise.all(boundTabIds.map((tabId) => clearTabActivityId(tabId)));
   const next: Record<string, string> = {};
   for (const [tabId, id] of Object.entries(state.bindings)) {
     if (id !== trackedTabId) next[tabId] = id;
   }
-  await setLocalState({ bindings: next });
+  const fingerprints = { ...state.restoreFingerprints };
+  delete fingerprints[trackedTabId];
+  await setLocalState({ bindings: next, restoreFingerprints: fingerprints });
 }
 
 export async function releaseTrackedTabBindings(trackedTabId: string) {
@@ -171,7 +230,10 @@ export async function bindTabToActivity(tabId: number, trackedTabId: string) {
   if (!tracked) throw new Error("Tethered activity not found");
 
   const existingBinding = state.bindings[bindingKey(tabId)];
-  if (existingBinding === trackedTabId) return tracked;
+  if (existingBinding === trackedTabId) {
+    await writeTabActivityId(tabId, trackedTabId);
+    return tracked;
+  }
 
   await setBinding(tabId, trackedTabId);
   await applyTrackedTitleBadge(tabId, tracked.emoji);
@@ -184,7 +246,7 @@ export async function unbindTab(tabId: number) {
   if (!trackedTabId) return null;
 
   await clearTrackedTitleBadge(tabId);
-  await clearBinding(tabId);
+  await clearBindingWithSession(tabId);
 
   const stillBound = Object.values((await getLocalState()).bindings).includes(trackedTabId);
   if (!stillBound) {
@@ -370,6 +432,11 @@ export async function handleTabUpdate(tabId: number, url?: string, title?: strin
       url: sanitized,
       title: cleanTitle,
     });
+    await captureRestoreFingerprint(tabId, trackedTabId, {
+      url: sanitized,
+      title: cleanTitle,
+      emoji: tracked?.emoji,
+    });
   } catch (error) {
     console.warn("Failed to sync tracked tab location", error);
   }
@@ -382,6 +449,7 @@ export async function handleTabRemoved(tabId: number) {
   if (!trackedTabId) return;
 
   await clearTrackedTitleBadge(tabId);
+  // Keep Firefox session tab values so Undo Close Tab / restart restore can rebind.
   await clearBinding(tabId);
 
   const deviceId = await getEffectiveDeviceId();
@@ -470,12 +538,31 @@ async function prunePendingReconnectForTab(
   }
 }
 
-function browserTabRestoreFields(tab: { id?: number; url?: string; pendingUrl?: string }) {
+function shouldClearStaleSessionActivityId(
+  activityId: string,
+  activities: TrackedTab[],
+): boolean {
+  const activity = activities.find((tab) => tab.id === activityId);
+  if (!activity) return true;
+  if (activity.archivedAt || activity.deletedAt) return true;
+  // Foreign-owned activities stay attached so a later take-over can still use them.
+  return false;
+}
+
+function browserTabRestoreFields(tab: RestorableBrowserTab): RestorableBrowserTab {
   return {
     id: tab.id,
     url: tab.url,
     pendingUrl:
       "pendingUrl" in tab && typeof tab.pendingUrl === "string" ? tab.pendingUrl : undefined,
+    title: tab.title,
+    pinned: tab.pinned,
+    index: tab.index,
+    windowId: tab.windowId,
+    openerTabId: tab.openerTabId,
+    lastAccessed: tab.lastAccessed,
+    groupId: tab.groupId,
+    incognito: tab.incognito,
   };
 }
 
@@ -493,7 +580,7 @@ export async function considerRestoredTab(tab: {
   title?: string;
 }) {
   if (!(await isRestoreWindowActive())) return;
-  if (tab.id === undefined || !tabRestoreUrl(tab)) return;
+  if (tab.id === undefined) return;
 
   await withRestoreLock(async () => {
     const state = await getLocalState();
@@ -501,11 +588,41 @@ export async function considerRestoredTab(tab: {
 
     const activities = await listKnownTrackedTabs();
     const effectiveId = await getEffectiveDeviceId();
+    const deviceIds = restoreDeviceIds(state, effectiveId);
+    const alreadyClaimedIds = new Set(Object.values(state.bindings));
+    const sessionActivityId = await readTabActivityId(tab.id!);
+    const sessionFields = {
+      ...browserTabRestoreFields(tab),
+      sessionActivityId,
+    };
+    const { bindings: sessionBindings } = claimSessionRestoredBindings(
+      [sessionFields],
+      activities.filter((activity) => !alreadyClaimedIds.has(activity.id)),
+      state.settings,
+      deviceIds,
+    );
+    const sessionTrackedId = sessionBindings[bindingKey(tab.id!)];
+    if (sessionTrackedId) {
+      await setBinding(tab.id!, sessionTrackedId);
+      const tracked = activities.find((activity) => activity.id === sessionTrackedId);
+      await applyTrackedTitleBadge(tab.id!, tracked?.emoji);
+      return;
+    }
+    if (sessionActivityId && shouldClearStaleSessionActivityId(sessionActivityId, activities)) {
+      await clearTabActivityId(tab.id!);
+    }
+
+    if (!tabRestoreUrl(tab)) return;
+
+    const claimedIds = new Set(Object.values(state.bindings));
+    const remainingActivities = activities.filter((activity) => !claimedIds.has(activity.id));
     const { bindings, pending } = matchRestoredBindings(
       [browserTabRestoreFields(tab)],
-      activities,
+      remainingActivities,
       state.settings,
-      restoreDeviceIds(state, effectiveId),
+      deviceIds,
+      state.restoreFingerprints,
+      { priorBindings: state.bindings },
     );
     const trackedTabId = bindings[bindingKey(tab.id!)];
     if (!trackedTabId) {
@@ -535,35 +652,84 @@ export async function reconcileRestoredTabs() {
     }
 
     const browserTabs = await browser.tabs.query({});
-    const { bindings, pending } = matchRestoredBindings(
-      browserTabs.map(browserTabRestoreFields),
-      remoteTabs,
-      state.settings,
-      restoreDeviceIds(state, effectiveId),
-    );
-
+    const deviceIds = restoreDeviceIds(state, effectiveId);
     const liveTabIds = new Set(
       browserTabs.flatMap((tab) => (tab.id === undefined ? [] : [String(tab.id)])),
     );
+    const liveBoundActivityIds = new Set(
+      Object.entries(state.bindings)
+        .filter(([tabId]) => liveTabIds.has(tabId))
+        .map(([, trackedId]) => trackedId),
+    );
+
+    const tabsWithSession = await Promise.all(
+      browserTabs.map(async (tab) => ({
+        ...browserTabRestoreFields(tab),
+        sessionActivityId: tab.id === undefined ? null : await readTabActivityId(tab.id),
+      })),
+    );
+
+    const unboundSessionTabs = tabsWithSession.filter(
+      (tab) => tab.id !== undefined && !state.bindings[String(tab.id)],
+    );
+
+    const { bindings: sessionBindings, claimedActivityIds } = claimSessionRestoredBindings(
+      unboundSessionTabs,
+      remoteTabs,
+      state.settings,
+      deviceIds,
+    );
+
+    await Promise.all(
+      unboundSessionTabs.map(async (tab) => {
+        if (tab.id === undefined || !tab.sessionActivityId) return;
+        if (sessionBindings[String(tab.id)]) return;
+        if (!shouldClearStaleSessionActivityId(tab.sessionActivityId, remoteTabs)) return;
+        await clearTabActivityId(tab.id);
+      }),
+    );
+
+    const unresolvedTabs = unboundSessionTabs.filter(
+      (tab) => tab.id !== undefined && !sessionBindings[String(tab.id)],
+    );
+    const remainingActivities = remoteTabs.filter(
+      (activity) =>
+        !claimedActivityIds.has(activity.id) && !liveBoundActivityIds.has(activity.id),
+    );
+
+    const { bindings: urlBindings, pending } = matchRestoredBindings(
+      unresolvedTabs,
+      remainingActivities,
+      state.settings,
+      deviceIds,
+      state.restoreFingerprints,
+      { priorBindings: { ...state.bindings, ...sessionBindings } },
+    );
+
     const keptBindings: Record<string, string> = {};
     for (const [tabId, trackedId] of Object.entries(state.bindings)) {
-      if (liveTabIds.has(tabId) && !bindings[tabId]) keptBindings[tabId] = trackedId;
+      if (liveTabIds.has(tabId) && !sessionBindings[tabId] && !urlBindings[tabId]) {
+        keptBindings[tabId] = trackedId;
+      }
     }
 
+    const mergedBindings = { ...sessionBindings, ...urlBindings };
     const sawTrackable = browserTabs.some((tab) =>
       Boolean(tabRestoreUrl(tab) && isTrackableUrl(tabRestoreUrl(tab))),
     );
-    if (!sawTrackable && Object.keys(bindings).length === 0) {
+    const sawSessionClaim = Object.keys(sessionBindings).length > 0;
+    if (!sawTrackable && !sawSessionClaim && Object.keys(mergedBindings).length === 0) {
       return;
     }
 
-    const nextBindings = { ...keptBindings, ...bindings };
+    const nextBindings = { ...keptBindings, ...mergedBindings };
     await setLocalState({
       bindings: nextBindings,
       pendingReconnect: pending,
     });
     await Promise.all(
-      Object.entries(nextBindings).map(([tabId, trackedId]) => {
+      Object.entries(nextBindings).map(async ([tabId, trackedId]) => {
+        await writeTabActivityId(Number(tabId), trackedId);
         const tracked = remoteTabs.find((tab) => tab.id === trackedId);
         return applyTrackedTitleBadge(Number(tabId), tracked?.emoji);
       }),

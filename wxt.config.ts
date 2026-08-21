@@ -42,6 +42,9 @@ export default defineConfig({
         "notifications",
         // Firefox Android does not support extension context menus.
         ...(isFirefoxAndroid ? [] : ["contextMenus"]),
+        // Per-tab session values (setTabValue) exist on Firefox only; Chromium
+        // has sessions.getRecentlyClosed but not tab session metadata.
+        ...(isFirefox ? ["sessions"] : []),
         // The LAN/WebRTC transport relies on Chromium's offscreen API.
         ...(isFirefox ? [] : ["offscreen"]),
       ],
