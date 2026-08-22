@@ -19,7 +19,7 @@ export const test = base.extend<ExtensionFixtures>({
   context: async ({}, use) => {
     if (!fs.existsSync(path.join(extensionPath, "manifest.json"))) {
       throw new Error(
-        `Missing Chrome build at ${extensionPath}. Run \`bun run build\` first.`,
+        `Missing Chrome build at ${extensionPath}. Run \`bun run build:chrome\` first.`,
       );
     }
 

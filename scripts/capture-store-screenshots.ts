@@ -2,7 +2,7 @@
  * Capture Chrome Web Store listing screenshots (1280×800 PNG).
  *
  * Usage:
- *   bun run build
+ *   bun run build:chrome
  *   bun run screenshots
  *
  * Output: store-assets/screenshots/
@@ -26,7 +26,7 @@ declare const chrome: {
 
 async function launchExtension() {
   if (!fs.existsSync(path.join(extensionPath, "manifest.json"))) {
-    throw new Error(`Missing Chrome build at ${extensionPath}. Run \`bun run build\` first.`);
+    throw new Error(`Missing Chrome build at ${extensionPath}. Run \`bun run build:chrome\` first.`);
   }
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "tabtether-shots-"));

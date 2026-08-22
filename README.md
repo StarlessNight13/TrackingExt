@@ -45,9 +45,11 @@ Files land in `store-assets/screenshots/`.
 Production builds:
 
 ```bash
-bun run build
+bun run build          # chrome + firefox
+bun run build:chrome
 bun run build:firefox
-bun run zip
+bun run zip            # chrome + firefox
+bun run zip:chrome
 bun run zip:firefox
 ```
 
